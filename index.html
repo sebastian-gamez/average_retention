@@ -14,7 +14,7 @@
     tailwind.config = { darkMode: 'class' }
   </script>
   <style>
-    /* Toggle switch con animación para el modo oscuro */
+    /* Toggle switch con animación para modo oscuro */
     .toggle-label {
       transition: background-color 0.3s ease;
     }
@@ -27,7 +27,7 @@
     .toggle-checkbox:checked + .toggle-label .toggle-ball {
       transform: translateX(100%);
     }
-    /* Botón para pantalla completa, posicionado en la esquina superior derecha del gráfico */
+    /* Botón pantalla completa, posicionado en la esquina superior derecha del gráfico */
     #fullscreenBtn {
       position: absolute;
       top: 10px;
@@ -38,6 +38,10 @@
     #resetCoinsBtn {
       margin-top: 10px;
       display: none;
+    }
+    /* Botón para descargar CSV */
+    #downloadBtn {
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -109,6 +113,15 @@
     
     <!-- Área de resultados (tabla) -->
     <div id="results" class="space-y-6"></div>
+    <!-- Botón para descargar CSV de la tabla -->
+    <button id="downloadBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
+      Descargar CSV
+    </button>
+    <!-- Selector de moneda de comparación: se mantiene visible siempre -->
+    <div id="compareDiv" class="mt-4">
+      <label class="text-gray-700 dark:text-gray-300">Moneda de comparación:</label>
+      <select id="baseCurrencySelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100"></select>
+    </div>
     
     <!-- Área para la gráfica -->
     <div id="chartContainer" class="relative mt-6">
@@ -124,19 +137,23 @@
     let chart; // Gráfica global
     let originalColors = []; // Colores originales de cada línea
     let currentSort = { field: null, order: 'asc' };
-    // Para la selección persistente en la gráfica (índices de dataset seleccionados)
+    // Para selección persistente en gráfica (índices de datasets seleccionados)
     let selectedDatasets = new Set();
-    // Para la selección de filas en la tabla (clave: currency)
+    // Para selección de filas en la tabla (clave: currency)
     let selectedRows = new Set();
-
+    // Para monedas deseleccionadas en la gráfica
+    let deselectedCoins = new Set();
+    // Moneda base de comparación (string)
+    let baseCurrency = null;
+    
     // Campos por defecto (siempre se incluyen)
     const defaultIntervals = ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21"];
-    // Global de intervalos (se actualizará tras procesar archivos)
+    // Global de intervalos (actualizado tras procesar archivos)
     let globalIntervals = [];
-    // Paleta de colores para líneas (sin repetir)
+    // Paleta de colores para líneas
     const colorPalette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#008000', '#00008B', '#800080', '#FFA500'];
-
-    // Rellena selectores de intervalo basados en globalIntervals
+    
+    // Rellena selectores de intervalo según globalIntervals
     function populateIntervalSelectors() {
       const startSelect = document.getElementById('startInterval');
       const endSelect = document.getElementById('endInterval');
@@ -155,7 +172,7 @@
       if(startSelect.options.length) startSelect.selectedIndex = 0;
       if(endSelect.options.length) endSelect.selectedIndex = globalIntervals.length - 1;
     }
-
+    
     // Actualiza el desplegable de archivos
     function updateFileList() {
       const fileListSelect = document.getElementById('fileList');
@@ -174,7 +191,7 @@
         fileListSelect.add(option);
       });
     }
-
+    
     // Agregar archivos
     document.getElementById('addFilesBtn').addEventListener('click', () => {
       const input = document.getElementById('csvInput');
@@ -188,7 +205,7 @@
       input.value = "";
       updateFileList();
     });
-
+    
     // Eliminar archivos seleccionados
     document.getElementById('removeFileBtn').addEventListener('click', () => {
       const fileListSelect = document.getElementById('fileList');
@@ -202,7 +219,7 @@
       });
       updateFileList();
     });
-
+    
     // Funciones auxiliares para degradado
     function interpolateColor(color1, color2, factor) {
       const result = color1.slice();
@@ -231,7 +248,7 @@
         return rgbToHex(rgb);
       }
     }
-
+    
     // Procesa un archivo CSV
     function processCSV(file) {
       return new Promise((resolve, reject) => {
@@ -242,7 +259,6 @@
             const data = results.data;
             let cohortDates = [];
             const allFields = results.meta.fields || [];
-            // Campos numéricos (formados solo por dígitos) salvo "cohort"
             let fileIntervalFields = allFields.filter(f => f !== "cohort" && /^[0-9]+$/.test(f));
             defaultIntervals.forEach(def => {
               if(!fileIntervalFields.includes(def)) fileIntervalFields.push(def);
@@ -296,7 +312,7 @@
         });
       });
     }
-
+    
     // Procesa todos los archivos y actualiza globalIntervals
     async function processAllFiles() {
       globalResults = [];
@@ -321,8 +337,8 @@
       });
       populateIntervalSelectors();
     }
-
-    // Ordena resultados según un campo
+    
+    // Ordena resultados según un campo sin borrar la selección
     function sortResults(field, order) {
       globalResults.sort((a, b) => {
         let aVal, bVal;
@@ -341,8 +357,8 @@
         }
       });
     }
-
-    // Renderiza la tabla con formato condicional y selección de fila
+    
+    // Renderiza la tabla con formato condicional, columna de enumeración y columna de comparación (siempre visible)
     function renderTable() {
       const resultsDiv = document.getElementById('results');
       resultsDiv.innerHTML = "";
@@ -357,14 +373,22 @@
       });
       let table = document.createElement('table');
       table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
-      
       let thead = document.createElement('thead');
       thead.className = "bg-gray-200 dark:bg-gray-700";
       let headerRow = document.createElement('tr');
-      const headers = [
+      
+      // Columna de enumeración
+      let thIndex = document.createElement('th');
+      thIndex.className = "py-2 px-4 border select-none text-gray-800 dark:text-gray-100";
+      thIndex.innerText = "N°";
+      headerRow.appendChild(thIndex);
+      
+      // Columnas existentes: Moneda, Fecha Inicio, Fecha Fin y Comparación
+      let headers = [
         { text: "Moneda", sortable: true, field: "currency" },
         { text: "Fecha Inicio", sortable: false },
-        { text: "Fecha Fin", sortable: false }
+        { text: "Fecha Fin", sortable: false },
+        { text: "Comparación", sortable: false }
       ];
       globalIntervals.forEach(field => {
         headers.push({ text: "Media " + field, sortable: true, field: field });
@@ -378,6 +402,7 @@
         }
         if(header.sortable) {
           th.addEventListener('click', () => {
+            // Al ordenar, no se limpia la selección de monedas
             if(currentSort.field === header.field) {
               currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
             } else {
@@ -402,27 +427,28 @@
       table.appendChild(thead);
       
       let tbody = document.createElement('tbody');
-      globalResults.forEach(result => {
+      // Para comparación, se usa el campo actualmente seleccionado (si numérico; si no, "1")
+      let compareField = (currentSort.field && currentSort.field !== "currency") ? currentSort.field : "1";
+      globalResults.forEach((result, index) => {
         let tr = document.createElement('tr');
-        // Si hay alguna fila seleccionada, las no seleccionadas se atenúan al 15%
-        if(selectedRows.size > 0) {
-          tr.style.opacity = selectedRows.has(result.currency) ? "1" : "0.15";
-        }
-        // Agregar evento a la celda de moneda para selección de fila (soporte Ctrl)
+        tr.style.opacity = selectedRows.size > 0 ? (selectedRows.has(result.currency) ? "1" : "0.15") : "1";
+        
+        // Columna de numeración de fila
+        let tdIndex = document.createElement('td');
+        tdIndex.className = "py-2 px-4 border";
+        tdIndex.innerText = index + 1;
+        tr.appendChild(tdIndex);
+        
         let tdCurrency = document.createElement('td');
         tdCurrency.className = "py-2 px-4 border";
         tdCurrency.innerText = result.currency;
         tdCurrency.style.cursor = "pointer";
+        // Al hacer clic se alterna la selección de la fila sin afectar la moneda base
         tdCurrency.addEventListener('click', (evt) => {
           evt.stopPropagation();
-          if(evt.ctrlKey) {
-            if(selectedRows.has(result.currency)) {
-              selectedRows.delete(result.currency);
-            } else {
-              selectedRows.add(result.currency);
-            }
+          if(selectedRows.has(result.currency)) {
+            selectedRows.delete(result.currency);
           } else {
-            selectedRows.clear();
             selectedRows.add(result.currency);
           }
           updateTableRowOpacity();
@@ -436,10 +462,32 @@
         tdMax.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
         tdMax.innerText = result.maxDate;
         tr.appendChild(tdMax);
+        // Columna de comparación (siempre visible)
+        let tdComp = document.createElement('td');
+        tdComp.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        if(result.currency === baseCurrency) {
+          tdComp.innerHTML = "Base";
+        } else {
+          let baseObj = globalResults.find(r => r.currency === baseCurrency);
+          let baseValue = baseObj ? baseObj.averages[compareField] : null;
+          let currentValue = result.averages[compareField];
+          if(baseValue && currentValue != null) {
+            let diff = ((currentValue - baseValue) / baseValue) * 100;
+            if(diff < 0) {
+              tdComp.innerHTML = `<span class="text-red-600">↓ ${Math.abs(diff).toFixed(2)}%</span>`;
+            } else if(diff > 0) {
+              tdComp.innerHTML = `<span class="text-green-600">↑ ${diff.toFixed(2)}%</span>`;
+            } else {
+              tdComp.innerHTML = "0%";
+            }
+          } else {
+            tdComp.innerHTML = "N/A";
+          }
+        }
+        tr.appendChild(tdComp);
         globalIntervals.forEach(field => {
           let td = document.createElement('td');
           td.className = "py-2 px-4 border";
-          // En modo oscuro, forzamos fuente negra en las celdas con formato condicional
           td.style.color = "black";
           let value = result.averages[field];
           if(value === null) {
@@ -462,37 +510,62 @@
       resultsDiv.appendChild(table);
     }
     
-    // Actualiza la opacidad de las filas de la tabla según la selección
+    // Actualiza la opacidad de las filas según la selección en la tabla
     function updateTableRowOpacity() {
       const table = document.querySelector("#results table");
       if(!table) return;
       const rows = table.querySelectorAll("tbody tr");
       rows.forEach(row => {
-        const currency = row.firstChild.innerText;
-        if(selectedRows.size > 0) {
-          row.style.opacity = selectedRows.has(currency) ? "1" : "0.15";
-        } else {
-          row.style.opacity = "1";
-        }
+        const currency = row.children[1].innerText; // Segunda celda: Moneda
+        row.style.opacity = selectedRows.size > 0 ? (selectedRows.has(currency) ? "1" : "0.15") : "1";
       });
     }
+    
+    // Actualiza el selector de moneda de comparación (se muestran TODAS las monedas procesadas)
+    function updateComparisonSelector() {
+      const compareDiv = document.getElementById('compareDiv');
+      const baseSelect = document.getElementById('baseCurrencySelect');
+      baseSelect.innerHTML = "";
+      // Se muestran todas las monedas disponibles
+      let options = globalResults.map(r => r.currency);
+      compareDiv.style.display = "block"; // Siempre visible
+      options.forEach(currency => {
+        let option = document.createElement('option');
+        option.value = currency;
+        option.text = currency;
+        baseSelect.add(option);
+      });
+      // Si la moneda base actual no está en la lista, se establece la primera
+      if(!baseCurrency || !options.includes(baseCurrency)) {
+        baseCurrency = options[0];
+      }
+      renderTable();
+    }
+    
+    // Evita que la interacción con el selector de comparación borre la selección
+    document.getElementById('compareDiv').addEventListener('click', (evt) => {
+      evt.stopPropagation();
+    });
+    
+    // Cuando cambia la moneda base en el selector (único medio para cambiarla)
+    document.getElementById('baseCurrencySelect').addEventListener('change', (evt) => {
+      baseCurrency = evt.target.value;
+      renderTable();
+    });
     
     // Renderiza la gráfica de líneas
     function renderChart() {
       const startIndex = parseInt(document.getElementById('startInterval').value);
       const endIndex = parseInt(document.getElementById('endInterval').value);
       const selectedLabels = globalIntervals.slice(startIndex, endIndex + 1);
-      
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chart) { chart.destroy(); }
-      
-      selectedDatasets = new Set([...selectedDatasets]); // conservar selección
+      // Conservar la selección previa en el gráfico
       originalColors = [];
       const datasets = globalResults.map((result, index) => {
         let color = colorPalette[index % colorPalette.length];
         originalColors.push(color);
         const data = selectedLabels.map(field => result.averages[field] !== undefined ? result.averages[field] : null);
-        // Si la moneda está en el conjunto de deseleccionadas, ocultar
         let hidden = deselectedCoins.has(result.currency);
         return {
           label: result.currency,
@@ -504,7 +577,6 @@
           hidden: hidden
         };
       });
-      
       chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -520,7 +592,6 @@
                 const index = legendItem.datasetIndex;
                 let ci = legend.chart;
                 let meta = ci.getDatasetMeta(index);
-                // Toggle hidden flag
                 meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
                 const currency = ci.data.datasets[index].label;
                 if(meta.hidden) {
@@ -543,9 +614,9 @@
               }
             }
           },
-          // Permitir selección de líneas en cualquier parte (no solo nodos) y con soporte a CTRL
+          // Permitir selección de líneas en cualquier parte con Control para múltiples
           onClick: (evt) => {
-            const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: false }, false);
+            const points = chart.getElementsAtEventForMode(evt, 'dataset', { intersect: false }, false);
             if(points.length) {
               const dsIndex = points[0].datasetIndex;
               if(evt.ctrlKey) {
@@ -568,9 +639,6 @@
                 }
               });
               chart.update();
-            } else {
-              selectedDatasets.clear();
-              resetDatasetsOpacity();
             }
             evt.stopPropagation();
           }
@@ -578,7 +646,7 @@
       });
     }
     
-    // Restablece opacidad de líneas al 100%
+    // Restablece la opacidad de todas las líneas al 100%
     function resetDatasetsOpacity() {
       chart.data.datasets.forEach((ds, i) => {
         ds.borderColor = hexToRgba(originalColors[i], 1);
@@ -587,7 +655,7 @@
       chart.update();
     }
     
-    // Convierte color hexadecimal a rgba
+    // Convierte hexadecimal a rgba
     function hexToRgba(hex, alpha) {
       hex = hex.replace('#', '');
       let r = parseInt(hex.substring(0,2), 16);
@@ -595,6 +663,49 @@
       let b = parseInt(hex.substring(4,6), 16);
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
+    
+    // Descarga la tabla actual en CSV
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      let csvContent = "";
+      let header = ["N°", "Moneda", "Fecha Inicio", "Fecha Fin"];
+      header.push("Comparación");
+      globalIntervals.forEach(field => header.push("Media " + field));
+      csvContent += header.join(",") + "\n";
+      globalResults.forEach((result, index) => {
+        let row = [];
+        row.push(index + 1);
+        row.push(result.currency);
+        row.push(result.minDate);
+        row.push(result.maxDate);
+        if(baseCurrency) {
+          if(result.currency === baseCurrency) {
+            row.push("Base");
+          } else {
+            let baseObj = globalResults.find(r => r.currency === baseCurrency);
+            let baseValue = baseObj ? baseObj.averages[currentSort.field && currentSort.field !== "currency" ? currentSort.field : "1"] : null;
+            let currentValue = result.averages[currentSort.field && currentSort.field !== "currency" ? currentSort.field : "1"];
+            if(baseValue && currentValue != null) {
+              let diff = ((currentValue - baseValue) / baseValue) * 100;
+              row.push(diff.toFixed(2) + "%");
+            } else {
+              row.push("N/A");
+            }
+          }
+        }
+        globalIntervals.forEach(field => {
+          let val = result.averages[field];
+          row.push(val === null ? "N/A" : val.toFixed(2) + "%");
+        });
+        csvContent += row.join(",") + "\n";
+      });
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tabla_cohorts.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
     
     // Procesa CSVs
     document.getElementById('processBtn').addEventListener('click', async function() {
@@ -607,6 +718,8 @@
       sortResults("1", "desc");
       renderTable();
       renderChart();
+      // Actualizamos el selector de moneda de comparación con todas las monedas
+      updateComparisonSelector();
     });
     
     // Reiniciar
@@ -621,9 +734,10 @@
       deselectedCoins.clear();
       document.getElementById('resetCoinsBtn').style.display = "none";
       selectedRows.clear();
+      updateComparisonSelector();
     });
     
-    // Actualizar gráfico por rango
+    // Actualiza gráfico por rango
     document.getElementById('updateChartRange').addEventListener('click', () => {
       if(globalResults.length > 0) { renderChart(); }
     });
@@ -637,28 +751,30 @@
       }
     });
     
-    // Evento global para restablecer selección de filas de la tabla
+    // Evento global para deseleccionar monedas en la tabla al hacer clic fuera (excepto botones, celdas o el selector de comparación)
     document.addEventListener('click', (evt) => {
-      if(evt.target.tagName !== "BUTTON" && !evt.target.closest("td")) {
-        selectedRows.clear();
+      if(evt.target.tagName !== "BUTTON" && !evt.target.closest("td") && !evt.target.closest("#compareDiv")) {
+        // No se borra la selección de monedas para preservar la selección al ordenar
         updateTableRowOpacity();
       }
-      if(evt.target.tagName !== "BUTTON" && evt.target.id !== "chartCanvas" && !evt.target.closest('#chartCanvas')) {
-        if(chart) { resetDatasetsOpacity(); selectedDatasets.clear(); }
-      }
+      // En el gráfico se mantiene la selección de líneas
+    });
+    
+    // Evita que el clic en el selector de comparación deseleccione las monedas
+    document.getElementById('compareDiv').addEventListener('click', (evt) => {
+      evt.stopPropagation();
     });
     
     // Botón pantalla completa del gráfico
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     fullscreenBtn.addEventListener('click', () => {
       const chartContainer = document.getElementById('chartContainer');
+      if(document.getElementById("darkModeToggle").checked) {
+        chartContainer.classList.add("dark");
+      } else {
+        chartContainer.classList.remove("dark");
+      }
       if(!document.fullscreenElement) {
-        // Ajustar modo oscuro según el toggle
-        if(document.getElementById("darkModeToggle").checked) {
-          chartContainer.classList.add("dark");
-        } else {
-          chartContainer.classList.remove("dark");
-        }
         chartContainer.requestFullscreen().catch(err => console.error(err));
         fullscreenBtn.innerText = "Salir Pantalla completa";
       } else {
@@ -672,8 +788,7 @@
       }
     });
     
-    // Botón para restablecer monedas (filas) deseleccionadas
-    const deselectedCoins = new Set();
+    // Botón para restablecer monedas deseleccionadas en el gráfico
     document.getElementById('resetCoinsBtn').addEventListener('click', () => {
       deselectedCoins.clear();
       document.getElementById('resetCoinsBtn').style.display = "none";
