@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Procesador de CSVs - Análisis de Cohorts</title>
+  <!-- Cargar PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <!-- Cargar Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Cargar Tailwind CSS vía CDN con darkMode por clase -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' }
+  </script>
+  <style>
+    /* Toggle switch con animación para el modo oscuro */
+    .toggle-label {
+      transition: background-color 0.3s ease;
+    }
+    .toggle-ball {
+      transition: transform 0.3s ease;
+    }
+    .toggle-checkbox:checked + .toggle-label {
+      background-color: #4f46e5;
+    }
+    .toggle-checkbox:checked + .toggle-label .toggle-ball {
+      transform: translateX(100%);
+    }
+    /* Botón para pantalla completa, posicionado en la esquina superior derecha del gráfico */
+    #fullscreenBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+    }
+    /* Botón para restablecer monedas, se muestra solo si hay monedas deseleccionadas */
+    #resetCoinsBtn {
+      margin-top: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100">
+  <div class="container mx-auto p-4">
+    <!-- Encabezado -->
+    <header class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold">Procesador de CSVs - Análisis de Cohorts</h1>
+        <p class="text-gray-600 dark:text-gray-300">Carga uno o varios archivos CSV para analizar la media de intervalos y fechas de cohort.</p>
+      </div>
+      <!-- Toggle para Modo Oscuro -->
+      <div class="flex items-center mt-4 md:mt-0">
+        <span class="mr-2">Modo claro</span>
+        <label class="relative inline-block w-10 h-6">
+          <input id="darkModeToggle" type="checkbox" class="toggle-checkbox opacity-0 w-0 h-0">
+          <span class="toggle-label absolute inset-0 bg-gray-300 dark:bg-gray-600 rounded-full"></span>
+          <span class="toggle-ball absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+        </label>
+        <span class="ml-2">Modo oscuro</span>
+      </div>
+    </header>
+    
+    <!-- Sección para cargar y administrar archivos CSV -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
+      <div class="mb-4">
+        <input id="csvInput" type="file" accept=".csv" multiple class="block mb-2">
+        <button id="addFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
+          Agregar Archivos
+        </button>
+      </div>
+      <!-- Desplegable para mostrar archivos agregados (soporte a selección múltiple) -->
+      <div class="mb-4">
+        <label for="fileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados:</label>
+        <select id="fileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" size="4" multiple></select>
+      </div>
+      <!-- Botón para eliminar archivos seleccionados -->
+      <div class="mb-4">
+        <button id="removeFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
+          Eliminar archivo(s) seleccionado(s)
+        </button>
+      </div>
+      <div class="flex space-x-4">
+        <button id="processBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+          Procesar CSVs
+        </button>
+        <button id="resetBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+          Reiniciar
+        </button>
+      </div>
+    </div>
+    
+    <!-- Opciones para seleccionar intervalos de tiempo a mostrar en la gráfica -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
+      <div class="flex space-x-4 items-center">
+        <label class="text-gray-700 dark:text-gray-300">Intervalo a mostrar:</label>
+        <select id="startInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
+          <!-- Se llenará dinámicamente -->
+        </select>
+        <span class="text-gray-700 dark:text-gray-300">a</span>
+        <select id="endInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
+          <!-- Se llenará dinámicamente -->
+        </select>
+        <button id="updateChartRange" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded">
+          Actualizar Gráfico
+        </button>
+      </div>
+    </div>
+    
+    <!-- Área de resultados (tabla) -->
+    <div id="results" class="space-y-6"></div>
+    
+    <!-- Área para la gráfica -->
+    <div id="chartContainer" class="relative mt-6">
+      <button id="fullscreenBtn" class="bg-gray-500 hover:bg-gray-600 text-white text-xs py-1 px-2 rounded">Pantalla completa</button>
+      <canvas id="chartCanvas"></canvas>
+    </div>
+    <button id="resetCoinsBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">Restablecer monedas</button>
+  </div>
+  
+  <script>
+    let globalResults = [];
+    let selectedFiles = [];
+    let chart; // Variable global para la gráfica
+    let originalColors = []; // Para guardar colores originales de cada línea
+    let currentSort = { field: null, order: 'asc' };
+    // Variable para mantener monedas (deseleccionadas) de forma persistente
+    let deselectedCoins = new Set();
+
+    // Campos por defecto (siempre se incluyen)
+    const defaultIntervals = ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21"];
+    
+    // Global conjunto de intervalos (se actualizará luego de procesar los archivos)
+    let globalIntervals = [];
+
+    // Paleta de colores para las líneas (no se repiten)
+    const colorPalette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#008000', '#00008B', '#800080', '#FFA500'];
+
+    // Rellena los selectores para intervalos de tiempo según globalIntervals
+    function populateIntervalSelectors() {
+      const startSelect = document.getElementById('startInterval');
+      const endSelect = document.getElementById('endInterval');
+      startSelect.innerHTML = "";
+      endSelect.innerHTML = "";
+      globalIntervals.forEach((val, index) => {
+        let option1 = document.createElement('option');
+        option1.value = index;
+        option1.text = val;
+        startSelect.add(option1);
+        let option2 = document.createElement('option');
+        option2.value = index;
+        option2.text = val;
+        endSelect.add(option2);
+      });
+      if(startSelect.options.length) startSelect.selectedIndex = 0;
+      if(endSelect.options.length) endSelect.selectedIndex = globalIntervals.length - 1;
+    }
+
+    // Actualiza el desplegable de archivos
+    function updateFileList() {
+      const fileListSelect = document.getElementById('fileList');
+      fileListSelect.innerHTML = "";
+      if(selectedFiles.length === 0) {
+        let option = document.createElement('option');
+        option.text = "No hay archivos seleccionados.";
+        option.disabled = true;
+        fileListSelect.add(option);
+        return;
+      }
+      selectedFiles.forEach((file, index) => {
+        let option = document.createElement('option');
+        option.value = index;
+        option.text = file.name;
+        fileListSelect.add(option);
+      });
+    }
+
+    // Evento para agregar archivos desde el input
+    document.getElementById('addFilesBtn').addEventListener('click', () => {
+      const input = document.getElementById('csvInput');
+      if (input.files.length === 0) {
+        alert("Por favor, selecciona al menos un archivo CSV.");
+        return;
+      }
+      for(let i = 0; i < input.files.length; i++) {
+        selectedFiles.push(input.files[i]);
+      }
+      input.value = "";
+      updateFileList();
+    });
+
+    // Eliminar archivos seleccionados (selección múltiple)
+    document.getElementById('removeFileBtn').addEventListener('click', () => {
+      const fileListSelect = document.getElementById('fileList');
+      const selectedOptions = Array.from(fileListSelect.selectedOptions);
+      if(selectedOptions.length === 0) {
+        alert("Por favor, selecciona al menos un archivo para eliminar.");
+        return;
+      }
+      selectedOptions.sort((a, b) => b.index - a.index).forEach(option => {
+        selectedFiles.splice(option.index, 1);
+      });
+      updateFileList();
+    });
+
+    // Función auxiliar para interpolar colores entre dos RGB
+    function interpolateColor(color1, color2, factor) {
+      const result = color1.slice();
+      for (let i = 0; i < 3; i++) {
+        result[i] = Math.round(result[i] + factor * (color2[i] - color1[i]));
+      }
+      return result;
+    }
+    // Función para convertir un array RGB a hexadecimal
+    function rgbToHex(rgb) {
+      return "#" + rgb.map(x => {
+        const hex = x.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+      }).join("");
+    }
+    // Devuelve un degradado basado en un valor normalizado (0 a 1)
+    function getGradientColor(normalized) {
+      const red = [255, 0, 0];
+      const yellow = [255, 255, 0];
+      const green = [0, 255, 0];
+      if (normalized <= 0.5) {
+        let factor = normalized / 0.5;
+        const rgb = interpolateColor(red, yellow, factor);
+        return rgbToHex(rgb);
+      } else {
+        let factor = (normalized - 0.5) / 0.5;
+        const rgb = interpolateColor(yellow, green, factor);
+        return rgbToHex(rgb);
+      }
+    }
+
+    // Procesa un archivo CSV y extrae los campos numéricos (además de "cohort")
+    function processCSV(file) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          dynamicTyping: true,
+          complete: function(results) {
+            const data = results.data;
+            let cohortDates = [];
+            const allFields = results.meta.fields || [];
+            // Campos numéricos (que sean dígitos) excepto "cohort"
+            let fileIntervalFields = allFields.filter(f => f !== "cohort" && /^[0-9]+$/.test(f));
+            defaultIntervals.forEach(def => {
+              if(!fileIntervalFields.includes(def)) fileIntervalFields.push(def);
+            });
+            fileIntervalFields.sort((a, b) => Number(a) - Number(b));
+            
+            let intervalSums = {};
+            let intervalCounts = {};
+            fileIntervalFields.forEach(field => {
+              intervalSums[field] = 0;
+              intervalCounts[field] = 0;
+            });
+            
+            data.forEach(row => {
+              if(row['cohort']) {
+                let date = new Date(row['cohort']);
+                if (!isNaN(date)) cohortDates.push(date);
+              }
+              fileIntervalFields.forEach(field => {
+                let value = row[field];
+                if(typeof value === 'number') {
+                  intervalSums[field] += value;
+                  intervalCounts[field] += 1;
+                } else if(typeof value === 'string' && value.trim() !== "") {
+                  let num = parseFloat(value);
+                  if(!isNaN(num)) {
+                    intervalSums[field] += num;
+                    intervalCounts[field] += 1;
+                  }
+                }
+              });
+            });
+            
+            let intervalAverages = {};
+            fileIntervalFields.forEach(field => {
+              if(intervalCounts[field] > 0) {
+                intervalAverages[field] = (intervalSums[field] / intervalCounts[field]) * 100;
+              } else {
+                intervalAverages[field] = null;
+              }
+            });
+            
+            let minDate = cohortDates.length ? new Date(Math.min(...cohortDates)) : null;
+            let maxDate = cohortDates.length ? new Date(Math.max(...cohortDates)) : null;
+            let currency = file.name.split(" ")[0];
+            
+            resolve({
+              currency: currency,
+              minDate: minDate ? minDate.toLocaleDateString() : "N/A",
+              maxDate: maxDate ? maxDate.toLocaleDateString() : "N/A",
+              averages: intervalAverages,
+              fields: fileIntervalFields
+            });
+          },
+          error: function(err) { reject(err); }
+        });
+      });
+    }
+
+    // Procesa todos los archivos y calcula la unión global de intervalos
+    async function processAllFiles() {
+      globalResults = [];
+      for(let i = 0; i < selectedFiles.length; i++) {
+        try {
+          let result = await processCSV(selectedFiles[i]);
+          globalResults.push(result);
+        } catch (err) {
+          console.error("Error en archivo:", selectedFiles[i].name, err);
+        }
+      }
+      // Unión de campos numéricos
+      let unionSet = new Set();
+      globalResults.forEach(result => {
+        result.fields.forEach(f => unionSet.add(f));
+      });
+      defaultIntervals.forEach(def => unionSet.add(def));
+      globalIntervals = Array.from(unionSet).sort((a, b) => Number(a) - Number(b));
+      // Asegurar que cada resultado tenga valor para cada campo global
+      globalResults.forEach(result => {
+        globalIntervals.forEach(field => {
+          if(!(field in result.averages)) result.averages[field] = null;
+        });
+      });
+      populateIntervalSelectors();
+    }
+
+    // Ordena resultados según un campo (moneda o numérico)
+    function sortResults(field, order) {
+      globalResults.sort((a, b) => {
+        let aVal, bVal;
+        if (field === "currency") {
+          aVal = a.currency.toLowerCase();
+          bVal = b.currency.toLowerCase();
+          if(aVal < bVal) return order === 'asc' ? -1 : 1;
+          if(aVal > bVal) return order === 'asc' ? 1 : -1;
+          return 0;
+        } else {
+          aVal = a.averages[field];
+          bVal = b.averages[field];
+          if(aVal === null) return 1;
+          if(bVal === null) return -1;
+          return order === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+      });
+    }
+
+    // Renderiza la tabla con formato condicional (degradado de color) y encabezado resaltado
+    function renderTable() {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = "";
+      let colMinMax = {};
+      globalIntervals.forEach(field => {
+        let values = globalResults.map(r => r.averages[field]).filter(v => v !== null);
+        if(values.length > 0) {
+          colMinMax[field] = { min: Math.min(...values), max: Math.max(...values) };
+        } else {
+          colMinMax[field] = { min: 0, max: 0 };
+        }
+      });
+      let table = document.createElement('table');
+      table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
+      
+      let thead = document.createElement('thead');
+      thead.className = "bg-gray-200 dark:bg-gray-700";
+      let headerRow = document.createElement('tr');
+      const headers = [
+        { text: "Moneda", sortable: true, field: "currency" },
+        { text: "Fecha Inicio", sortable: false },
+        { text: "Fecha Fin", sortable: false }
+      ];
+      globalIntervals.forEach(field => {
+        headers.push({ text: "Media " + field, sortable: true, field: field });
+      });
+      headers.forEach(header => {
+        let th = document.createElement('th');
+        th.className = "py-2 px-4 border cursor-pointer select-none text-gray-800 dark:text-gray-100";
+        th.innerText = header.text;
+        if(header.sortable && currentSort.field === header.field) {
+          th.classList.add("bg-blue-200", "dark:bg-blue-700");
+        }
+        if(header.sortable) {
+          th.addEventListener('click', () => {
+            if(currentSort.field === header.field) {
+              currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSort.field = header.field;
+              currentSort.order = 'desc';
+            }
+            sortResults(header.field, currentSort.order);
+            renderTable();
+            renderChart();
+          });
+          if(currentSort.field === header.field) {
+            let arrow = document.createElement('span');
+            arrow.innerText = currentSort.order === 'asc' ? " ▲" : " ▼";
+            th.appendChild(arrow);
+          }
+        } else {
+          th.classList.remove("cursor-pointer");
+        }
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      let tbody = document.createElement('tbody');
+      globalResults.forEach(result => {
+        let tr = document.createElement('tr');
+        tr.className = "text-center border-t";
+        let tdCurrency = document.createElement('td');
+        tdCurrency.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        tdCurrency.innerText = result.currency;
+        tr.appendChild(tdCurrency);
+        let tdMin = document.createElement('td');
+        tdMin.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        tdMin.innerText = result.minDate;
+        tr.appendChild(tdMin);
+        let tdMax = document.createElement('td');
+        tdMax.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        tdMax.innerText = result.maxDate;
+        tr.appendChild(tdMax);
+        globalIntervals.forEach(field => {
+          let td = document.createElement('td');
+          td.className = "py-2 px-4 border";
+          // En modo oscuro, forzamos texto oscuro para celdas con formato condicional
+          if(document.documentElement.classList.contains("dark")){
+            td.style.color = "#1f2937"; // tono oscuro (gray-800)
+          } else {
+            td.style.color = "inherit";
+          }
+          let value = result.averages[field];
+          if(value === null) {
+            td.innerText = "N/A";
+          } else {
+            td.innerText = value.toFixed(2) + "%";
+            let { min, max } = colMinMax[field];
+            if(max - min > 0) {
+              let normalized = (value - min) / (max - min);
+              td.style.backgroundColor = getGradientColor(normalized);
+            } else {
+              td.style.backgroundColor = "#ffff99";
+            }
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      resultsDiv.appendChild(table);
+    }
+    
+    // Renderiza la gráfica de líneas
+    function renderChart() {
+      const startIndex = parseInt(document.getElementById('startInterval').value);
+      const endIndex = parseInt(document.getElementById('endInterval').value);
+      const selectedLabels = globalIntervals.slice(startIndex, endIndex + 1);
+      
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if(chart) { chart.destroy(); }
+      
+      originalColors = [];
+      const datasets = globalResults.map((result, index) => {
+        let color = colorPalette[index % colorPalette.length];
+        originalColors.push(color);
+        const data = selectedLabels.map(field => result.averages[field] !== undefined ? result.averages[field] : null);
+        // Si la moneda está deseleccionada, se oculta
+        let hidden = deselectedCoins.has(result.currency);
+        return {
+          label: result.currency,
+          data: data,
+          fill: false,
+          tension: 0.1,
+          borderColor: color,
+          backgroundColor: color,
+          hidden: hidden
+        };
+      });
+      
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: selectedLabels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+              onClick: (evt, legendItem, legend) => {
+                const index = legendItem.datasetIndex;
+                let ci = legend.chart;
+                let meta = ci.getDatasetMeta(index);
+                // Toggle hidden flag
+                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                // Actualiza deselectedCoins
+                const currency = ci.data.datasets[index].label;
+                if(meta.hidden) {
+                  deselectedCoins.add(currency);
+                } else {
+                  deselectedCoins.delete(currency);
+                }
+                // Mostrar botón para restablecer monedas si hay alguna deseleccionada
+                document.getElementById('resetCoinsBtn').style.display = deselectedCoins.size > 0 ? "block" : "none";
+                ci.update();
+              }
+            },
+            title: { display: true, text: 'Desarrollo de Medias por Moneda' }
+          },
+          scales: {
+            y: {
+              ticks: {
+                callback: function(value) {
+                  return value !== null ? value.toFixed(2) + "%" : "";
+                }
+              }
+            }
+          },
+          onClick: (evt) => {
+            const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+            if(points.length) {
+              const datasetIndex = points[0].datasetIndex;
+              chart.data.datasets.forEach((ds, i) => {
+                // Sólo afecta a las líneas que no estén ocultas
+                if(!ds.hidden) {
+                  if(i === datasetIndex) {
+                    ds.borderColor = hexToRgba(originalColors[i], 1);
+                    ds.backgroundColor = hexToRgba(originalColors[i], 1);
+                  } else {
+                    ds.borderColor = hexToRgba(originalColors[i], 0.1);
+                    ds.backgroundColor = hexToRgba(originalColors[i], 0.1);
+                  }
+                }
+              });
+              chart.update();
+            } else {
+              resetDatasetsOpacity();
+            }
+            evt.stopPropagation();
+          }
+        }
+      });
+    }
+    
+    // Restablece la opacidad de todas las líneas visibles al 100%
+    function resetDatasetsOpacity() {
+      chart.data.datasets.forEach((ds, i) => {
+        ds.borderColor = hexToRgba(originalColors[i], 1);
+        ds.backgroundColor = hexToRgba(originalColors[i], 1);
+      });
+      chart.update();
+    }
+    
+    // Convierte un color hexadecimal a rgba con alfa dado
+    function hexToRgba(hex, alpha) {
+      hex = hex.replace('#', '');
+      let r = parseInt(hex.substring(0,2), 16);
+      let g = parseInt(hex.substring(2,4), 16);
+      let b = parseInt(hex.substring(4,6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    
+    // Evento para procesar CSVs
+    document.getElementById('processBtn').addEventListener('click', async function() {
+      if(selectedFiles.length === 0) {
+        alert("No hay archivos seleccionados para procesar.");
+        return;
+      }
+      await processAllFiles();
+      currentSort = { field: "1", order: "desc" };
+      sortResults("1", "desc");
+      renderTable();
+      renderChart();
+    });
+    
+    // Botón de reiniciar (limpia archivos, resultados y gráfico)
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      selectedFiles = [];
+      globalResults = [];
+      globalIntervals = [];
+      updateFileList();
+      document.getElementById('results').innerHTML = "";
+      if(chart) { chart.destroy(); }
+      populateIntervalSelectors();
+      deselectedCoins.clear();
+      document.getElementById('resetCoinsBtn').style.display = "none";
+    });
+    
+    // Actualiza el gráfico según rango seleccionado
+    document.getElementById('updateChartRange').addEventListener('click', () => {
+      if(globalResults.length > 0) { renderChart(); }
+    });
+    
+    // Toggle modo oscuro
+    document.getElementById("darkModeToggle").addEventListener("change", function() {
+      if(this.checked) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    });
+    
+    // Evento global para restablecer opacidades al hacer clic fuera
+    document.addEventListener('click', (evt) => {
+      if(evt.target.tagName !== "BUTTON" && evt.target.id !== "chartCanvas" && !evt.target.closest('#chartCanvas')) {
+        if(chart) { resetDatasetsOpacity(); }
+      }
+    });
+    
+    // Botón para pantalla completa en el gráfico
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    fullscreenBtn.addEventListener('click', () => {
+      const chartContainer = document.getElementById('chartContainer');
+      if(!document.fullscreenElement) {
+        chartContainer.requestFullscreen().catch(err => { console.error(err); });
+        fullscreenBtn.innerText = "Salir Pantalla completa";
+      } else {
+        document.exitFullscreen();
+        fullscreenBtn.innerText = "Pantalla completa";
+      }
+    });
+    // Escuchar cambios de fullscreen para actualizar el botón
+    document.addEventListener("fullscreenchange", () => {
+      if(!document.fullscreenElement) {
+        fullscreenBtn.innerText = "Pantalla completa";
+      }
+    });
+    
+    // Botón para restablecer monedas (aparece si hay alguna deseleccionada)
+    document.getElementById('resetCoinsBtn').addEventListener('click', () => {
+      deselectedCoins.clear();
+      document.getElementById('resetCoinsBtn').style.display = "none";
+      renderChart();
+    });
+  </script>
+</body>
+</html>
