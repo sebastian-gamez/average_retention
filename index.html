@@ -34,7 +34,7 @@
       right: 10px;
       z-index: 10;
     }
-    /* Botón para restablecer monedas, se muestra solo si hay monedas deseleccionadas */
+    /* Botón para restablecer monedas (filas) */
     #resetCoinsBtn {
       margin-top: 10px;
       display: none;
@@ -69,7 +69,7 @@
           Agregar Archivos
         </button>
       </div>
-      <!-- Desplegable para mostrar archivos agregados (soporte a selección múltiple) -->
+      <!-- Desplegable para mostrar archivos agregados (selección múltiple) -->
       <div class="mb-4">
         <label for="fileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados:</label>
         <select id="fileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" size="4" multiple></select>
@@ -121,22 +121,22 @@
   <script>
     let globalResults = [];
     let selectedFiles = [];
-    let chart; // Variable global para la gráfica
-    let originalColors = []; // Para guardar colores originales de cada línea
+    let chart; // Gráfica global
+    let originalColors = []; // Colores originales de cada línea
     let currentSort = { field: null, order: 'asc' };
-    // Variable para mantener monedas (deseleccionadas) de forma persistente
-    let deselectedCoins = new Set();
+    // Para la selección persistente en la gráfica (índices de dataset seleccionados)
+    let selectedDatasets = new Set();
+    // Para la selección de filas en la tabla (clave: currency)
+    let selectedRows = new Set();
 
     // Campos por defecto (siempre se incluyen)
     const defaultIntervals = ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21"];
-    
-    // Global conjunto de intervalos (se actualizará luego de procesar los archivos)
+    // Global de intervalos (se actualizará tras procesar archivos)
     let globalIntervals = [];
-
-    // Paleta de colores para las líneas (no se repiten)
+    // Paleta de colores para líneas (sin repetir)
     const colorPalette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#008000', '#00008B', '#800080', '#FFA500'];
 
-    // Rellena los selectores para intervalos de tiempo según globalIntervals
+    // Rellena selectores de intervalo basados en globalIntervals
     function populateIntervalSelectors() {
       const startSelect = document.getElementById('startInterval');
       const endSelect = document.getElementById('endInterval');
@@ -175,10 +175,10 @@
       });
     }
 
-    // Evento para agregar archivos desde el input
+    // Agregar archivos
     document.getElementById('addFilesBtn').addEventListener('click', () => {
       const input = document.getElementById('csvInput');
-      if (input.files.length === 0) {
+      if(input.files.length === 0) {
         alert("Por favor, selecciona al menos un archivo CSV.");
         return;
       }
@@ -189,7 +189,7 @@
       updateFileList();
     });
 
-    // Eliminar archivos seleccionados (selección múltiple)
+    // Eliminar archivos seleccionados
     document.getElementById('removeFileBtn').addEventListener('click', () => {
       const fileListSelect = document.getElementById('fileList');
       const selectedOptions = Array.from(fileListSelect.selectedOptions);
@@ -203,27 +203,25 @@
       updateFileList();
     });
 
-    // Función auxiliar para interpolar colores entre dos RGB
+    // Funciones auxiliares para degradado
     function interpolateColor(color1, color2, factor) {
       const result = color1.slice();
-      for (let i = 0; i < 3; i++) {
+      for(let i = 0; i < 3; i++) {
         result[i] = Math.round(result[i] + factor * (color2[i] - color1[i]));
       }
       return result;
     }
-    // Función para convertir un array RGB a hexadecimal
     function rgbToHex(rgb) {
       return "#" + rgb.map(x => {
         const hex = x.toString(16);
         return hex.length === 1 ? "0" + hex : hex;
       }).join("");
     }
-    // Devuelve un degradado basado en un valor normalizado (0 a 1)
     function getGradientColor(normalized) {
       const red = [255, 0, 0];
       const yellow = [255, 255, 0];
       const green = [0, 255, 0];
-      if (normalized <= 0.5) {
+      if(normalized <= 0.5) {
         let factor = normalized / 0.5;
         const rgb = interpolateColor(red, yellow, factor);
         return rgbToHex(rgb);
@@ -234,7 +232,7 @@
       }
     }
 
-    // Procesa un archivo CSV y extrae los campos numéricos (además de "cohort")
+    // Procesa un archivo CSV
     function processCSV(file) {
       return new Promise((resolve, reject) => {
         Papa.parse(file, {
@@ -244,24 +242,22 @@
             const data = results.data;
             let cohortDates = [];
             const allFields = results.meta.fields || [];
-            // Campos numéricos (que sean dígitos) excepto "cohort"
+            // Campos numéricos (formados solo por dígitos) salvo "cohort"
             let fileIntervalFields = allFields.filter(f => f !== "cohort" && /^[0-9]+$/.test(f));
             defaultIntervals.forEach(def => {
               if(!fileIntervalFields.includes(def)) fileIntervalFields.push(def);
             });
             fileIntervalFields.sort((a, b) => Number(a) - Number(b));
-            
             let intervalSums = {};
             let intervalCounts = {};
             fileIntervalFields.forEach(field => {
               intervalSums[field] = 0;
               intervalCounts[field] = 0;
             });
-            
             data.forEach(row => {
               if(row['cohort']) {
                 let date = new Date(row['cohort']);
-                if (!isNaN(date)) cohortDates.push(date);
+                if(!isNaN(date)) cohortDates.push(date);
               }
               fileIntervalFields.forEach(field => {
                 let value = row[field];
@@ -277,7 +273,6 @@
                 }
               });
             });
-            
             let intervalAverages = {};
             fileIntervalFields.forEach(field => {
               if(intervalCounts[field] > 0) {
@@ -286,11 +281,9 @@
                 intervalAverages[field] = null;
               }
             });
-            
             let minDate = cohortDates.length ? new Date(Math.min(...cohortDates)) : null;
             let maxDate = cohortDates.length ? new Date(Math.max(...cohortDates)) : null;
             let currency = file.name.split(" ")[0];
-            
             resolve({
               currency: currency,
               minDate: minDate ? minDate.toLocaleDateString() : "N/A",
@@ -304,25 +297,23 @@
       });
     }
 
-    // Procesa todos los archivos y calcula la unión global de intervalos
+    // Procesa todos los archivos y actualiza globalIntervals
     async function processAllFiles() {
       globalResults = [];
       for(let i = 0; i < selectedFiles.length; i++) {
         try {
           let result = await processCSV(selectedFiles[i]);
           globalResults.push(result);
-        } catch (err) {
+        } catch(err) {
           console.error("Error en archivo:", selectedFiles[i].name, err);
         }
       }
-      // Unión de campos numéricos
       let unionSet = new Set();
       globalResults.forEach(result => {
         result.fields.forEach(f => unionSet.add(f));
       });
       defaultIntervals.forEach(def => unionSet.add(def));
       globalIntervals = Array.from(unionSet).sort((a, b) => Number(a) - Number(b));
-      // Asegurar que cada resultado tenga valor para cada campo global
       globalResults.forEach(result => {
         globalIntervals.forEach(field => {
           if(!(field in result.averages)) result.averages[field] = null;
@@ -331,11 +322,11 @@
       populateIntervalSelectors();
     }
 
-    // Ordena resultados según un campo (moneda o numérico)
+    // Ordena resultados según un campo
     function sortResults(field, order) {
       globalResults.sort((a, b) => {
         let aVal, bVal;
-        if (field === "currency") {
+        if(field === "currency") {
           aVal = a.currency.toLowerCase();
           bVal = b.currency.toLowerCase();
           if(aVal < bVal) return order === 'asc' ? -1 : 1;
@@ -351,7 +342,7 @@
       });
     }
 
-    // Renderiza la tabla con formato condicional (degradado de color) y encabezado resaltado
+    // Renderiza la tabla con formato condicional y selección de fila
     function renderTable() {
       const resultsDiv = document.getElementById('results');
       resultsDiv.innerHTML = "";
@@ -413,10 +404,29 @@
       let tbody = document.createElement('tbody');
       globalResults.forEach(result => {
         let tr = document.createElement('tr');
-        tr.className = "text-center border-t";
+        // Si hay alguna fila seleccionada, las no seleccionadas se atenúan al 15%
+        if(selectedRows.size > 0) {
+          tr.style.opacity = selectedRows.has(result.currency) ? "1" : "0.15";
+        }
+        // Agregar evento a la celda de moneda para selección de fila (soporte Ctrl)
         let tdCurrency = document.createElement('td');
-        tdCurrency.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        tdCurrency.className = "py-2 px-4 border";
         tdCurrency.innerText = result.currency;
+        tdCurrency.style.cursor = "pointer";
+        tdCurrency.addEventListener('click', (evt) => {
+          evt.stopPropagation();
+          if(evt.ctrlKey) {
+            if(selectedRows.has(result.currency)) {
+              selectedRows.delete(result.currency);
+            } else {
+              selectedRows.add(result.currency);
+            }
+          } else {
+            selectedRows.clear();
+            selectedRows.add(result.currency);
+          }
+          updateTableRowOpacity();
+        });
         tr.appendChild(tdCurrency);
         let tdMin = document.createElement('td');
         tdMin.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
@@ -429,12 +439,8 @@
         globalIntervals.forEach(field => {
           let td = document.createElement('td');
           td.className = "py-2 px-4 border";
-          // En modo oscuro, forzamos texto oscuro para celdas con formato condicional
-          if(document.documentElement.classList.contains("dark")){
-            td.style.color = "#1f2937"; // tono oscuro (gray-800)
-          } else {
-            td.style.color = "inherit";
-          }
+          // En modo oscuro, forzamos fuente negra en las celdas con formato condicional
+          td.style.color = "black";
           let value = result.averages[field];
           if(value === null) {
             td.innerText = "N/A";
@@ -456,6 +462,21 @@
       resultsDiv.appendChild(table);
     }
     
+    // Actualiza la opacidad de las filas de la tabla según la selección
+    function updateTableRowOpacity() {
+      const table = document.querySelector("#results table");
+      if(!table) return;
+      const rows = table.querySelectorAll("tbody tr");
+      rows.forEach(row => {
+        const currency = row.firstChild.innerText;
+        if(selectedRows.size > 0) {
+          row.style.opacity = selectedRows.has(currency) ? "1" : "0.15";
+        } else {
+          row.style.opacity = "1";
+        }
+      });
+    }
+    
     // Renderiza la gráfica de líneas
     function renderChart() {
       const startIndex = parseInt(document.getElementById('startInterval').value);
@@ -465,12 +486,13 @@
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chart) { chart.destroy(); }
       
+      selectedDatasets = new Set([...selectedDatasets]); // conservar selección
       originalColors = [];
       const datasets = globalResults.map((result, index) => {
         let color = colorPalette[index % colorPalette.length];
         originalColors.push(color);
         const data = selectedLabels.map(field => result.averages[field] !== undefined ? result.averages[field] : null);
-        // Si la moneda está deseleccionada, se oculta
+        // Si la moneda está en el conjunto de deseleccionadas, ocultar
         let hidden = deselectedCoins.has(result.currency);
         return {
           label: result.currency,
@@ -500,14 +522,12 @@
                 let meta = ci.getDatasetMeta(index);
                 // Toggle hidden flag
                 meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
-                // Actualiza deselectedCoins
                 const currency = ci.data.datasets[index].label;
                 if(meta.hidden) {
                   deselectedCoins.add(currency);
                 } else {
                   deselectedCoins.delete(currency);
                 }
-                // Mostrar botón para restablecer monedas si hay alguna deseleccionada
                 document.getElementById('resetCoinsBtn').style.display = deselectedCoins.size > 0 ? "block" : "none";
                 ci.update();
               }
@@ -523,24 +543,33 @@
               }
             }
           },
+          // Permitir selección de líneas en cualquier parte (no solo nodos) y con soporte a CTRL
           onClick: (evt) => {
-            const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+            const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: false }, false);
             if(points.length) {
-              const datasetIndex = points[0].datasetIndex;
+              const dsIndex = points[0].datasetIndex;
+              if(evt.ctrlKey) {
+                if(selectedDatasets.has(dsIndex)) {
+                  selectedDatasets.delete(dsIndex);
+                } else {
+                  selectedDatasets.add(dsIndex);
+                }
+              } else {
+                selectedDatasets.clear();
+                selectedDatasets.add(dsIndex);
+              }
               chart.data.datasets.forEach((ds, i) => {
-                // Sólo afecta a las líneas que no estén ocultas
-                if(!ds.hidden) {
-                  if(i === datasetIndex) {
-                    ds.borderColor = hexToRgba(originalColors[i], 1);
-                    ds.backgroundColor = hexToRgba(originalColors[i], 1);
-                  } else {
-                    ds.borderColor = hexToRgba(originalColors[i], 0.1);
-                    ds.backgroundColor = hexToRgba(originalColors[i], 0.1);
-                  }
+                if(selectedDatasets.has(i)) {
+                  ds.borderColor = hexToRgba(originalColors[i], 1);
+                  ds.backgroundColor = hexToRgba(originalColors[i], 1);
+                } else {
+                  ds.borderColor = hexToRgba(originalColors[i], 0.1);
+                  ds.backgroundColor = hexToRgba(originalColors[i], 0.1);
                 }
               });
               chart.update();
             } else {
+              selectedDatasets.clear();
               resetDatasetsOpacity();
             }
             evt.stopPropagation();
@@ -549,7 +578,7 @@
       });
     }
     
-    // Restablece la opacidad de todas las líneas visibles al 100%
+    // Restablece opacidad de líneas al 100%
     function resetDatasetsOpacity() {
       chart.data.datasets.forEach((ds, i) => {
         ds.borderColor = hexToRgba(originalColors[i], 1);
@@ -558,7 +587,7 @@
       chart.update();
     }
     
-    // Convierte un color hexadecimal a rgba con alfa dado
+    // Convierte color hexadecimal a rgba
     function hexToRgba(hex, alpha) {
       hex = hex.replace('#', '');
       let r = parseInt(hex.substring(0,2), 16);
@@ -567,7 +596,7 @@
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
     
-    // Evento para procesar CSVs
+    // Procesa CSVs
     document.getElementById('processBtn').addEventListener('click', async function() {
       if(selectedFiles.length === 0) {
         alert("No hay archivos seleccionados para procesar.");
@@ -580,7 +609,7 @@
       renderChart();
     });
     
-    // Botón de reiniciar (limpia archivos, resultados y gráfico)
+    // Reiniciar
     document.getElementById('resetBtn').addEventListener('click', () => {
       selectedFiles = [];
       globalResults = [];
@@ -591,9 +620,10 @@
       populateIntervalSelectors();
       deselectedCoins.clear();
       document.getElementById('resetCoinsBtn').style.display = "none";
+      selectedRows.clear();
     });
     
-    // Actualiza el gráfico según rango seleccionado
+    // Actualizar gráfico por rango
     document.getElementById('updateChartRange').addEventListener('click', () => {
       if(globalResults.length > 0) { renderChart(); }
     });
@@ -607,33 +637,43 @@
       }
     });
     
-    // Evento global para restablecer opacidades al hacer clic fuera
+    // Evento global para restablecer selección de filas de la tabla
     document.addEventListener('click', (evt) => {
+      if(evt.target.tagName !== "BUTTON" && !evt.target.closest("td")) {
+        selectedRows.clear();
+        updateTableRowOpacity();
+      }
       if(evt.target.tagName !== "BUTTON" && evt.target.id !== "chartCanvas" && !evt.target.closest('#chartCanvas')) {
-        if(chart) { resetDatasetsOpacity(); }
+        if(chart) { resetDatasetsOpacity(); selectedDatasets.clear(); }
       }
     });
     
-    // Botón para pantalla completa en el gráfico
+    // Botón pantalla completa del gráfico
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     fullscreenBtn.addEventListener('click', () => {
       const chartContainer = document.getElementById('chartContainer');
       if(!document.fullscreenElement) {
-        chartContainer.requestFullscreen().catch(err => { console.error(err); });
+        // Ajustar modo oscuro según el toggle
+        if(document.getElementById("darkModeToggle").checked) {
+          chartContainer.classList.add("dark");
+        } else {
+          chartContainer.classList.remove("dark");
+        }
+        chartContainer.requestFullscreen().catch(err => console.error(err));
         fullscreenBtn.innerText = "Salir Pantalla completa";
       } else {
         document.exitFullscreen();
         fullscreenBtn.innerText = "Pantalla completa";
       }
     });
-    // Escuchar cambios de fullscreen para actualizar el botón
     document.addEventListener("fullscreenchange", () => {
       if(!document.fullscreenElement) {
         fullscreenBtn.innerText = "Pantalla completa";
       }
     });
     
-    // Botón para restablecer monedas (aparece si hay alguna deseleccionada)
+    // Botón para restablecer monedas (filas) deseleccionadas
+    const deselectedCoins = new Set();
     document.getElementById('resetCoinsBtn').addEventListener('click', () => {
       deselectedCoins.clear();
       document.getElementById('resetCoinsBtn').style.display = "none";
