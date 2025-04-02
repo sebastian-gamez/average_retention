@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Procesador de CSVs - Análisis de Cohorts</title>
+  <title>Procesador de CSVs - Análisis de Cohorts, A/B Test y Gráficos</title>
   <!-- Cargar PapaParse -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <!-- Cargar Chart.js -->
@@ -65,7 +65,7 @@
       </div>
     </header>
     
-    <!-- Sección para cargar y administrar archivos CSV -->
+    <!-- Sección para cargar y administrar archivos CSV (funcionalidad original) -->
     <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
       <div class="mb-4">
         <input id="csvInput" type="file" accept=".csv" multiple class="block mb-2">
@@ -128,10 +128,59 @@
       <button id="fullscreenBtn" class="bg-gray-500 hover:bg-gray-600 text-white text-xs py-1 px-2 rounded">Pantalla completa</button>
       <canvas id="chartCanvas"></canvas>
     </div>
-    <button id="resetCoinsBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">Restablecer monedas</button>
+    <button id="resetCoinsBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
+      Restablecer monedas
+    </button>
+    <!-- Botón para restablecer opacidad de todas las líneas del gráfico -->
+    <button id="resetOpacityBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded">
+      Restablecer Opacidad
+    </button>
+    
+    <!-- Sección de A/B Test (nuevo apartado) -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6" id="abTestSection">
+      <h2 class="text-2xl font-bold mb-4">A/B Test</h2>
+      <!-- Carga de archivos para A/B Test -->
+      <div class="mb-4">
+        <input id="csvABInput" type="file" accept=".csv" multiple class="block mb-2">
+        <button id="addABFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
+          Agregar Archivos A/B Test
+        </button>
+      </div>
+      <!-- Lista de archivos seleccionados para A/B Test -->
+      <div class="mb-4">
+        <label for="abFileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados para A/B Test:</label>
+        <select id="abFileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" size="2" multiple></select>
+      </div>
+      <div class="mb-4">
+        <button id="removeABFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
+          Eliminar archivo(s) seleccionado(s)
+        </button>
+      </div>
+      <div class="mb-4">
+        <button id="processABBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+          Procesar A/B Test
+        </button>
+        <button id="resetABBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+          Reiniciar A/B Test
+        </button>
+      </div>
+      <!-- Selección de la media a comparar para determinar el ganador -->
+      <div class="mb-4" id="abMediaSection" style="display:none;">
+        <label class="text-gray-700 dark:text-gray-300">Selecciona la media a comparar:</label>
+        <select id="abMediaSelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
+          <!-- Se llenará dinámicamente -->
+        </select>
+        <button id="compareABBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
+          Comparar A/B Test
+        </button>
+      </div>
+      <!-- Resultados del A/B Test -->
+      <div id="abResults" class="space-y-6"></div>
+    </div>
   </div>
   
   <script>
+    /********************** Funcionalidad original **********************/
     let globalResults = [];
     let selectedFiles = [];
     let chart; // Gráfica global
@@ -402,7 +451,6 @@
         }
         if(header.sortable) {
           th.addEventListener('click', () => {
-            // Al ordenar, no se limpia la selección de monedas
             if(currentSort.field === header.field) {
               currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
             } else {
@@ -427,13 +475,11 @@
       table.appendChild(thead);
       
       let tbody = document.createElement('tbody');
-      // Para comparación, se usa el campo actualmente seleccionado (si numérico; si no, "1")
       let compareField = (currentSort.field && currentSort.field !== "currency") ? currentSort.field : "1";
       globalResults.forEach((result, index) => {
         let tr = document.createElement('tr');
         tr.style.opacity = selectedRows.size > 0 ? (selectedRows.has(result.currency) ? "1" : "0.15") : "1";
         
-        // Columna de numeración de fila
         let tdIndex = document.createElement('td');
         tdIndex.className = "py-2 px-4 border";
         tdIndex.innerText = index + 1;
@@ -443,7 +489,6 @@
         tdCurrency.className = "py-2 px-4 border";
         tdCurrency.innerText = result.currency;
         tdCurrency.style.cursor = "pointer";
-        // Al hacer clic se alterna la selección de la fila sin afectar la moneda base
         tdCurrency.addEventListener('click', (evt) => {
           evt.stopPropagation();
           if(selectedRows.has(result.currency)) {
@@ -454,15 +499,17 @@
           updateTableRowOpacity();
         });
         tr.appendChild(tdCurrency);
+        
         let tdMin = document.createElement('td');
         tdMin.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
         tdMin.innerText = result.minDate;
         tr.appendChild(tdMin);
+        
         let tdMax = document.createElement('td');
         tdMax.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
         tdMax.innerText = result.maxDate;
         tr.appendChild(tdMax);
-        // Columna de comparación (siempre visible)
+        
         let tdComp = document.createElement('td');
         tdComp.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
         if(result.currency === baseCurrency) {
@@ -485,6 +532,7 @@
           }
         }
         tr.appendChild(tdComp);
+        
         globalIntervals.forEach(field => {
           let td = document.createElement('td');
           td.className = "py-2 px-4 border";
@@ -516,7 +564,7 @@
       if(!table) return;
       const rows = table.querySelectorAll("tbody tr");
       rows.forEach(row => {
-        const currency = row.children[1].innerText; // Segunda celda: Moneda
+        const currency = row.children[1].innerText;
         row.style.opacity = selectedRows.size > 0 ? (selectedRows.has(currency) ? "1" : "0.15") : "1";
       });
     }
@@ -526,16 +574,14 @@
       const compareDiv = document.getElementById('compareDiv');
       const baseSelect = document.getElementById('baseCurrencySelect');
       baseSelect.innerHTML = "";
-      // Se muestran todas las monedas disponibles
       let options = globalResults.map(r => r.currency);
-      compareDiv.style.display = "block"; // Siempre visible
+      compareDiv.style.display = "block";
       options.forEach(currency => {
         let option = document.createElement('option');
         option.value = currency;
         option.text = currency;
         baseSelect.add(option);
       });
-      // Si la moneda base actual no está en la lista, se establece la primera
       if(!baseCurrency || !options.includes(baseCurrency)) {
         baseCurrency = options[0];
       }
@@ -547,7 +593,7 @@
       evt.stopPropagation();
     });
     
-    // Cuando cambia la moneda base en el selector (único medio para cambiarla)
+    // Cambio de moneda base
     document.getElementById('baseCurrencySelect').addEventListener('change', (evt) => {
       baseCurrency = evt.target.value;
       renderTable();
@@ -560,7 +606,6 @@
       const selectedLabels = globalIntervals.slice(startIndex, endIndex + 1);
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chart) { chart.destroy(); }
-      // Conservar la selección previa en el gráfico
       originalColors = [];
       const datasets = globalResults.map((result, index) => {
         let color = colorPalette[index % colorPalette.length];
@@ -614,7 +659,6 @@
               }
             }
           },
-          // Permitir selección de líneas en cualquier parte con Control para múltiples
           onClick: (evt) => {
             const points = chart.getElementsAtEventForMode(evt, 'dataset', { intersect: false }, false);
             if(points.length) {
@@ -718,7 +762,6 @@
       sortResults("1", "desc");
       renderTable();
       renderChart();
-      // Actualizamos el selector de moneda de comparación con todas las monedas
       updateComparisonSelector();
     });
     
@@ -751,16 +794,13 @@
       }
     });
     
-    // Evento global para deseleccionar monedas en la tabla al hacer clic fuera (excepto botones, celdas o el selector de comparación)
+    // Evento global para deseleccionar monedas en la tabla al hacer clic fuera
     document.addEventListener('click', (evt) => {
       if(evt.target.tagName !== "BUTTON" && !evt.target.closest("td") && !evt.target.closest("#compareDiv")) {
-        // No se borra la selección de monedas para preservar la selección al ordenar
         updateTableRowOpacity();
       }
-      // En el gráfico se mantiene la selección de líneas
     });
     
-    // Evita que el clic en el selector de comparación deseleccione las monedas
     document.getElementById('compareDiv').addEventListener('click', (evt) => {
       evt.stopPropagation();
     });
@@ -794,6 +834,244 @@
       document.getElementById('resetCoinsBtn').style.display = "none";
       renderChart();
     });
+    
+    // Botón para restablecer opacidad de todas las líneas del gráfico
+    document.getElementById('resetOpacityBtn').addEventListener('click', () => {
+      resetDatasetsOpacity();
+    });
+    
+    /********************** Funcionalidad A/B Test (nuevo apartado) **********************/
+    let abSelectedFiles = [];
+    let abResults = [];
+    let abGlobalIntervals = [];
+    
+    // Actualiza el desplegable de archivos para A/B Test
+    function updateABFileList() {
+      const abFileList = document.getElementById('abFileList');
+      abFileList.innerHTML = "";
+      if(abSelectedFiles.length === 0) {
+        let option = document.createElement('option');
+        option.text = "No hay archivos seleccionados.";
+        option.disabled = true;
+        abFileList.add(option);
+        return;
+      }
+      abSelectedFiles.forEach((file, index) => {
+        let option = document.createElement('option');
+        option.value = index;
+        option.text = file.name;
+        abFileList.add(option);
+      });
+    }
+    
+    // Agregar archivos para A/B Test
+    document.getElementById('addABFilesBtn').addEventListener('click', () => {
+      const input = document.getElementById('csvABInput');
+      if(input.files.length === 0) {
+        alert("Por favor, selecciona al menos un archivo CSV para A/B Test.");
+        return;
+      }
+      for(let i = 0; i < input.files.length; i++) {
+        // Se permite solo hasta 2 archivos
+        if(abSelectedFiles.length < 2) {
+          abSelectedFiles.push(input.files[i]);
+        }
+      }
+      input.value = "";
+      updateABFileList();
+    });
+    
+    // Eliminar archivos seleccionados para A/B Test
+    document.getElementById('removeABFileBtn').addEventListener('click', () => {
+      const abFileList = document.getElementById('abFileList');
+      const selectedOptions = Array.from(abFileList.selectedOptions);
+      if(selectedOptions.length === 0) {
+        alert("Por favor, selecciona al menos un archivo para eliminar.");
+        return;
+      }
+      selectedOptions.sort((a, b) => b.index - a.index).forEach(option => {
+        abSelectedFiles.splice(option.index, 1);
+      });
+      updateABFileList();
+    });
+    
+    // Procesa los archivos de A/B Test
+    async function processABFiles() {
+      if(abSelectedFiles.length !== 2) {
+        alert("Debes seleccionar exactamente 2 archivos para realizar el A/B Test.");
+        return;
+      }
+      abResults = [];
+      for(let i = 0; i < abSelectedFiles.length; i++) {
+        try {
+          let result = await processCSV(abSelectedFiles[i]);
+          abResults.push(result);
+        } catch(err) {
+          console.error("Error en archivo:", abSelectedFiles[i].name, err);
+        }
+      }
+      // Obtener la unión de campos
+      let unionSet = new Set();
+      abResults.forEach(result => {
+        result.fields.forEach(f => unionSet.add(f));
+      });
+      defaultIntervals.forEach(def => unionSet.add(def));
+      abGlobalIntervals = Array.from(unionSet).sort((a, b) => Number(a) - Number(b));
+      abResults.forEach(result => {
+        abGlobalIntervals.forEach(field => {
+          if(!(field in result.averages)) result.averages[field] = null;
+        });
+      });
+      // Llenar el selector de media para A/B Test
+      populateABMediaSelector();
+      document.getElementById('abMediaSection').style.display = "block";
+      renderABTable();
+    }
+    
+    // Renderiza la tabla de resultados para A/B Test con diferencia porcentual (cuando se seleccione la media)
+    function renderABTable(winnerField = null) {
+      const abResultsDiv = document.getElementById('abResults');
+      abResultsDiv.innerHTML = "";
+      let table = document.createElement('table');
+      table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
+      let thead = document.createElement('thead');
+      thead.className = "bg-gray-200 dark:bg-gray-700";
+      let headerRow = document.createElement('tr');
+      
+      // Columna de enumeración
+      let thIndex = document.createElement('th');
+      thIndex.className = "py-2 px-4 border select-none text-gray-800 dark:text-gray-100";
+      thIndex.innerText = "N°";
+      headerRow.appendChild(thIndex);
+      
+      // Columnas: Moneda, Fecha Inicio, Fecha Fin
+      let headers = [
+        { text: "Moneda" },
+        { text: "Fecha Inicio" },
+        { text: "Fecha Fin" }
+      ];
+      // Si se ha seleccionado una media para comparar, insertar columna extra para la diferencia porcentual
+      if(winnerField) {
+        headers.push({ text: "Diferencia (%)" });
+      }
+      // Agregar columnas para cada media encontrada
+      abGlobalIntervals.forEach(field => {
+        headers.push({ text: "Media " + field, field: field });
+      });
+      headers.forEach(header => {
+        let th = document.createElement('th');
+        th.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        th.innerText = header.text;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      let tbody = document.createElement('tbody');
+      // Si se ha seleccionado una media para comparar, determinar el ganador y calcular la diferencia porcentual
+      let winnerIndex = null;
+      let differencePercentage = null;
+      if(winnerField) {
+        let value0 = abResults[0].averages[winnerField];
+        let value1 = abResults[1].averages[winnerField];
+        if(value0 != null && value1 != null) {
+          if(value0 > value1) {
+            winnerIndex = 0;
+            differencePercentage = ((value0 - value1) / value1) * 100;
+          } else if(value1 > value0) {
+            winnerIndex = 1;
+            differencePercentage = ((value1 - value0) / value0) * 100;
+          }
+        }
+      }
+      abResults.forEach((result, index) => {
+        let tr = document.createElement('tr');
+        if(index === winnerIndex) {
+          tr.classList.add("bg-green-200");
+        }
+        let tdIndex = document.createElement('td');
+        tdIndex.className = "py-2 px-4 border";
+        tdIndex.innerText = index + 1;
+        tr.appendChild(tdIndex);
+        
+        let tdCurrency = document.createElement('td');
+        tdCurrency.className = "py-2 px-4 border";
+        tdCurrency.innerText = result.currency;
+        tr.appendChild(tdCurrency);
+        
+        let tdMin = document.createElement('td');
+        tdMin.className = "py-2 px-4 border";
+        tdMin.innerText = result.minDate;
+        tr.appendChild(tdMin);
+        
+        let tdMax = document.createElement('td');
+        tdMax.className = "py-2 px-4 border";
+        tdMax.innerText = result.maxDate;
+        tr.appendChild(tdMax);
+        
+        // Si se ha seleccionado una media, agregar celda con la diferencia porcentual solo en la fila ganadora
+        if(winnerField) {
+          let tdDiff = document.createElement('td');
+          tdDiff.className = "py-2 px-4 border";
+          if(index === winnerIndex && differencePercentage !== null) {
+            tdDiff.innerText = differencePercentage.toFixed(2) + "%";
+          } else {
+            tdDiff.innerText = "";
+          }
+          tr.appendChild(tdDiff);
+        }
+        
+        abGlobalIntervals.forEach(field => {
+          let td = document.createElement('td');
+          td.className = "py-2 px-4 border";
+          let value = result.averages[field];
+          if(value === null) {
+            td.innerText = "N/A";
+          } else {
+            td.innerText = value.toFixed(2) + "%";
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      abResultsDiv.appendChild(table);
+    }
+    
+    // Llena el selector de media para comparar en A/B Test
+    function populateABMediaSelector() {
+      const abMediaSelect = document.getElementById('abMediaSelect');
+      abMediaSelect.innerHTML = "";
+      abGlobalIntervals.forEach(field => {
+        let option = document.createElement('option');
+        option.value = field;
+        option.text = "Media " + field;
+        abMediaSelect.add(option);
+      });
+    }
+    
+    // Botón para procesar A/B Test
+    document.getElementById('processABBtn').addEventListener('click', async () => {
+      await processABFiles();
+    });
+    
+    // Botón para comparar A/B Test (determinar ganador según media seleccionada)
+    document.getElementById('compareABBtn').addEventListener('click', () => {
+      const abMediaSelect = document.getElementById('abMediaSelect');
+      const selectedField = abMediaSelect.value;
+      renderABTable(selectedField);
+    });
+    
+    // Botón para reiniciar A/B Test
+    document.getElementById('resetABBtn').addEventListener('click', () => {
+      abSelectedFiles = [];
+      abResults = [];
+      abGlobalIntervals = [];
+      updateABFileList();
+      document.getElementById('abResults').innerHTML = "";
+      document.getElementById('abMediaSection').style.display = "none";
+    });
+    
   </script>
 </body>
 </html>
