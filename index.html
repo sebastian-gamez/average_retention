@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Procesador de CSVs - Análisis de Cohorts, A/B Test y Gráficos</title>
+  <title>Procesador de CSVs - Análisis de Cohorts y A/B Test</title>
   <!-- Cargar PapaParse -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <!-- Cargar Chart.js -->
@@ -14,7 +14,7 @@
     tailwind.config = { darkMode: 'class' }
   </script>
   <style>
-    /* Toggle switch con animación para modo oscuro */
+    /* Toggle switch para modo oscuro */
     .toggle-label {
       transition: background-color 0.3s ease;
     }
@@ -27,28 +27,28 @@
     .toggle-checkbox:checked + .toggle-label .toggle-ball {
       transform: translateX(100%);
     }
-    /* Botón pantalla completa, posicionado en la esquina superior derecha del gráfico */
+    /* Botones en la esquina del gráfico */
     #fullscreenBtn {
       position: absolute;
       top: 10px;
       right: 10px;
       z-index: 10;
     }
-    /* Botón para restablecer monedas (filas) */
-    #resetCoinsBtn {
+    #resetCoinsBtn, #resetOpacityBtn {
       margin-top: 10px;
+    }
+    #resetCoinsBtn {
       display: none;
     }
-    /* Botón para descargar CSV */
     #downloadBtn {
       margin-top: 10px;
     }
   </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100">
-  <div class="container mx-auto p-4">
+  <div class="container mx-auto p-4 space-y-8">
     <!-- Encabezado -->
-    <header class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
+    <header class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between bg-white dark:bg-gray-800 shadow rounded p-4">
       <div>
         <h1 class="text-3xl font-bold">Procesador de CSVs - Análisis de Cohorts</h1>
         <p class="text-gray-600 dark:text-gray-300">Carga uno o varios archivos CSV para analizar la media de intervalos y fechas de cohort.</p>
@@ -65,144 +65,182 @@
       </div>
     </header>
     
-    <!-- Sección para cargar y administrar archivos CSV (funcionalidad original) -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
-      <div class="mb-4">
-        <input id="csvInput" type="file" accept=".csv" multiple class="block mb-2">
-        <button id="addFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
-          Agregar Archivos
-        </button>
-      </div>
-      <!-- Desplegable para mostrar archivos agregados (selección múltiple) -->
-      <div class="mb-4">
-        <label for="fileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados:</label>
-        <select id="fileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" size="4" multiple></select>
-      </div>
-      <!-- Botón para eliminar archivos seleccionados -->
-      <div class="mb-4">
-        <button id="removeFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
-          Eliminar archivo(s) seleccionado(s)
-        </button>
-      </div>
-      <div class="flex space-x-4">
-        <button id="processBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-          Procesar CSVs
-        </button>
-        <button id="resetBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-          Reiniciar
-        </button>
+    <!-- Sección de CSVs (Funcionalidad original) -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4">
+      <h2 class="text-2xl font-bold mb-2">
+        Carga de CSVs 
+        <button id="toggleCsvSectionBtn" onclick="toggleSection('csvSectionContent', 'toggleCsvSectionBtn')" class="text-sm bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Ocultar</button>
+      </h2>
+      <div id="csvSectionContent">
+        <div class="mb-4">
+          <input id="csvInput" type="file" accept=".csv" multiple class="block mb-2">
+          <button id="addFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
+            Agregar Archivos
+          </button>
+        </div>
+        <div class="mb-4">
+          <label for="fileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados:</label>
+          <select id="fileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700" size="4" multiple></select>
+        </div>
+        <div class="mb-4">
+          <button id="removeFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
+            Eliminar archivo(s) seleccionado(s)
+          </button>
+        </div>
+        <div class="flex space-x-4">
+          <button id="processBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+            Procesar CSVs
+          </button>
+          <button id="resetBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+            Reiniciar
+          </button>
+        </div>
       </div>
     </div>
     
-    <!-- Opciones para seleccionar intervalos de tiempo a mostrar en la gráfica -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
-      <div class="flex space-x-4 items-center">
+    <!-- Opciones de Intervalos y Gráfica -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4">
+      <h2 class="text-2xl font-bold mb-2">Visualización y Gráfica</h2>
+      <div class="flex flex-wrap space-x-4 items-center mb-4">
         <label class="text-gray-700 dark:text-gray-300">Intervalo a mostrar:</label>
-        <select id="startInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
-          <!-- Se llenará dinámicamente -->
-        </select>
+        <select id="startInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
         <span class="text-gray-700 dark:text-gray-300">a</span>
-        <select id="endInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
-          <!-- Se llenará dinámicamente -->
-        </select>
+        <select id="endInterval" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
         <button id="updateChartRange" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded">
           Actualizar Gráfico
         </button>
       </div>
+      <div id="chartContainer" class="relative mb-4">
+        <button id="fullscreenBtn" class="bg-gray-500 hover:bg-gray-600 text-white text-xs py-1 px-2 rounded">Pantalla completa</button>
+        <canvas id="chartCanvas"></canvas>
+      </div>
+      <div class="flex space-x-4">
+        <button id="resetCoinsBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
+          Restablecer monedas
+        </button>
+        <button id="resetOpacityBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded">
+          Restablecer Opacidad
+        </button>
+        <button id="downloadBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
+          Descargar CSV
+        </button>
+      </div>
+      <!-- Selector de moneda de comparación -->
+      <div id="compareDiv" class="mt-4">
+        <label class="text-gray-700 dark:text-gray-300">Moneda de comparación:</label>
+        <select id="baseCurrencySelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
+      </div>
+      <!-- Resultados en tabla -->
+      <div id="results" class="mt-4"></div>
     </div>
     
-    <!-- Área de resultados (tabla) -->
-    <div id="results" class="space-y-6"></div>
-    <!-- Botón para descargar CSV de la tabla -->
-    <button id="downloadBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
-      Descargar CSV
-    </button>
-    <!-- Selector de moneda de comparación: se mantiene visible siempre -->
-    <div id="compareDiv" class="mt-4">
-      <label class="text-gray-700 dark:text-gray-300">Moneda de comparación:</label>
-      <select id="baseCurrencySelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100"></select>
-    </div>
-    
-    <!-- Área para la gráfica -->
-    <div id="chartContainer" class="relative mt-6">
-      <button id="fullscreenBtn" class="bg-gray-500 hover:bg-gray-600 text-white text-xs py-1 px-2 rounded">Pantalla completa</button>
-      <canvas id="chartCanvas"></canvas>
-    </div>
-    <button id="resetCoinsBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
-      Restablecer monedas
-    </button>
-    <!-- Botón para restablecer opacidad de todas las líneas del gráfico -->
-    <button id="resetOpacityBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded">
-      Restablecer Opacidad
-    </button>
-    
-    <!-- Sección de A/B Test (nuevo apartado) -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6" id="abTestSection">
-      <h2 class="text-2xl font-bold mb-4">A/B Test</h2>
-      <!-- Carga de archivos para A/B Test -->
-      <div class="mb-4">
-        <input id="csvABInput" type="file" accept=".csv" multiple class="block mb-2">
-        <button id="addABFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
-          Agregar Archivos A/B Test
-        </button>
+    <!-- Sección de A/B Test -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded p-4">
+      <h2 class="text-2xl font-bold mb-4">
+        A/B Test 
+        <button id="toggleAbCsvSectionBtn" onclick="toggleSection('abCsvSectionContent', 'toggleAbCsvSectionBtn')" class="text-sm bg-gray-200 dark:bg-gray-700 rounded px-2 py-1">Ocultar</button>
+      </h2>
+      <!-- Sección de carga de archivos para A/B Test (desplegable) -->
+      <div id="abCsvSectionContent">
+        <div class="mb-4">
+          <input id="csvABInput" type="file" accept=".csv" multiple class="block mb-2">
+          <button id="addABFilesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded">
+            Agregar Archivos A/B Test
+          </button>
+        </div>
+        <div class="mb-4">
+          <label for="abFileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados para A/B Test:</label>
+          <select id="abFileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700" size="2" multiple></select>
+        </div>
+        <div class="mb-4">
+          <button id="removeABFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
+            Eliminar archivo(s) seleccionado(s)
+          </button>
+        </div>
+        <div class="flex space-x-4 mb-4">
+          <button id="processABBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+            Procesar A/B Test
+          </button>
+          <button id="resetABBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+            Reiniciar A/B Test
+          </button>
+        </div>
       </div>
-      <!-- Lista de archivos seleccionados para A/B Test -->
-      <div class="mb-4">
-        <label for="abFileList" class="block text-gray-700 dark:text-gray-300 mb-1">Archivos seleccionados para A/B Test:</label>
-        <select id="abFileList" class="w-full p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" size="2" multiple></select>
+      <!-- Botón para restablecer la opacidad en A/B Test -->
+      <button id="resetABOpacityBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded mb-4">
+        Restablecer Opacidad A/B Test
+      </button>
+      
+      <!-- Modo 1: Comparación por MAYOR DIFERENCIA (más alto gana) -->
+      <div class="border p-4 rounded mb-6">
+        <h3 class="text-xl font-semibold mb-2">Comparación: Mayor Media</h3>
+        <div id="abMediaSection" class="mb-4" style="display:none;">
+          <label class="text-gray-700 dark:text-gray-300">Selecciona la media a comparar:</label>
+          <select id="abMediaSelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
+          <button id="compareABBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded ml-2">
+            Comparar
+          </button>
+        </div>
+        <!-- Anuncio del ganador -->
+        <div id="abWinnerAnnouncement" class="mb-4 text-lg font-bold text-green-700"></div>
+        <!-- Tabla de resultados -->
+        <div id="abResults" class="mb-4"></div>
       </div>
-      <div class="mb-4">
-        <button id="removeABFileBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded">
-          Eliminar archivo(s) seleccionado(s)
-        </button>
+      
+      <!-- Modo 2: Comparación por MENOR DIFERENCIA (al restar dos medias) -->
+      <div class="border p-4 rounded">
+        <h3 class="text-xl font-semibold mb-2">Comparación: Menor Diferencia entre Medias</h3>
+        <div id="abMediaSectionMin" class="mb-4" style="display:none;">
+          <div class="flex flex-wrap space-x-4 mb-2">
+            <div>
+              <label class="text-gray-700 dark:text-gray-300">Media A:</label>
+              <select id="abMediaSelectMinA" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
+            </div>
+            <div>
+              <label class="text-gray-700 dark:text-gray-300">Media B:</label>
+              <select id="abMediaSelectMinB" class="p-2 rounded bg-gray-100 dark:bg-gray-700"></select>
+            </div>
+            <button id="compareABMinBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded self-end">
+              Comparar Diferencia
+            </button>
+          </div>
+        </div>
+        <!-- Anuncio del ganador en modo menor diferencia -->
+        <div id="abWinnerAnnouncementMin" class="mb-4 text-lg font-bold text-green-700"></div>
+        <!-- Tabla de resultados para modo menor diferencia -->
+        <div id="abResultsMin"></div>
       </div>
-      <div class="mb-4">
-        <button id="processABBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-          Procesar A/B Test
-        </button>
-        <button id="resetABBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-          Reiniciar A/B Test
-        </button>
-      </div>
-      <!-- Selección de la media a comparar para determinar el ganador -->
-      <div class="mb-4" id="abMediaSection" style="display:none;">
-        <label class="text-gray-700 dark:text-gray-300">Selecciona la media a comparar:</label>
-        <select id="abMediaSelect" class="p-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100">
-          <!-- Se llenará dinámicamente -->
-        </select>
-        <button id="compareABBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded">
-          Comparar A/B Test
-        </button>
-      </div>
-      <!-- Resultados del A/B Test -->
-      <div id="abResults" class="space-y-6"></div>
     </div>
   </div>
   
   <script>
-    /********************** Funcionalidad original **********************/
+    /********************** Funcionalidad Común **********************/
     let globalResults = [];
     let selectedFiles = [];
     let chart; // Gráfica global
-    let originalColors = []; // Colores originales de cada línea
+    let originalColors = [];
     let currentSort = { field: null, order: 'asc' };
-    // Para selección persistente en gráfica (índices de datasets seleccionados)
     let selectedDatasets = new Set();
-    // Para selección de filas en la tabla (clave: currency)
     let selectedRows = new Set();
-    // Para monedas deseleccionadas en la gráfica
     let deselectedCoins = new Set();
-    // Moneda base de comparación (string)
     let baseCurrency = null;
-    
-    // Campos por defecto (siempre se incluyen)
     const defaultIntervals = ["1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21"];
-    // Global de intervalos (actualizado tras procesar archivos)
     let globalIntervals = [];
-    // Paleta de colores para líneas
     const colorPalette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8B0000', '#008000', '#00008B', '#800080', '#FFA500'];
     
-    // Rellena selectores de intervalo según globalIntervals
+    // Función para alternar la visualización de secciones (desplegable)
+    function toggleSection(sectionId, buttonId) {
+      var section = document.getElementById(sectionId);
+      var button = document.getElementById(buttonId);
+      if (section.style.display === "none" || section.style.display === "") {
+        section.style.display = "block";
+        button.innerText = "Ocultar";
+      } else {
+        section.style.display = "none";
+        button.innerText = "Mostrar";
+      }
+    }
+    
     function populateIntervalSelectors() {
       const startSelect = document.getElementById('startInterval');
       const endSelect = document.getElementById('endInterval');
@@ -222,7 +260,6 @@
       if(endSelect.options.length) endSelect.selectedIndex = globalIntervals.length - 1;
     }
     
-    // Actualiza el desplegable de archivos
     function updateFileList() {
       const fileListSelect = document.getElementById('fileList');
       fileListSelect.innerHTML = "";
@@ -241,7 +278,6 @@
       });
     }
     
-    // Agregar archivos
     document.getElementById('addFilesBtn').addEventListener('click', () => {
       const input = document.getElementById('csvInput');
       if(input.files.length === 0) {
@@ -255,7 +291,6 @@
       updateFileList();
     });
     
-    // Eliminar archivos seleccionados
     document.getElementById('removeFileBtn').addEventListener('click', () => {
       const fileListSelect = document.getElementById('fileList');
       const selectedOptions = Array.from(fileListSelect.selectedOptions);
@@ -269,7 +304,6 @@
       updateFileList();
     });
     
-    // Funciones auxiliares para degradado
     function interpolateColor(color1, color2, factor) {
       const result = color1.slice();
       for(let i = 0; i < 3; i++) {
@@ -298,7 +332,6 @@
       }
     }
     
-    // Procesa un archivo CSV
     function processCSV(file) {
       return new Promise((resolve, reject) => {
         Papa.parse(file, {
@@ -362,7 +395,6 @@
       });
     }
     
-    // Procesa todos los archivos y actualiza globalIntervals
     async function processAllFiles() {
       globalResults = [];
       for(let i = 0; i < selectedFiles.length; i++) {
@@ -387,7 +419,6 @@
       populateIntervalSelectors();
     }
     
-    // Ordena resultados según un campo sin borrar la selección
     function sortResults(field, order) {
       globalResults.sort((a, b) => {
         let aVal, bVal;
@@ -407,7 +438,6 @@
       });
     }
     
-    // Renderiza la tabla con formato condicional, columna de enumeración y columna de comparación (siempre visible)
     function renderTable() {
       const resultsDiv = document.getElementById('results');
       resultsDiv.innerHTML = "";
@@ -426,13 +456,11 @@
       thead.className = "bg-gray-200 dark:bg-gray-700";
       let headerRow = document.createElement('tr');
       
-      // Columna de enumeración
       let thIndex = document.createElement('th');
       thIndex.className = "py-2 px-4 border select-none text-gray-800 dark:text-gray-100";
       thIndex.innerText = "N°";
       headerRow.appendChild(thIndex);
       
-      // Columnas existentes: Moneda, Fecha Inicio, Fecha Fin y Comparación
       let headers = [
         { text: "Moneda", sortable: true, field: "currency" },
         { text: "Fecha Inicio", sortable: false },
@@ -558,7 +586,6 @@
       resultsDiv.appendChild(table);
     }
     
-    // Actualiza la opacidad de las filas según la selección en la tabla
     function updateTableRowOpacity() {
       const table = document.querySelector("#results table");
       if(!table) return;
@@ -569,7 +596,6 @@
       });
     }
     
-    // Actualiza el selector de moneda de comparación (se muestran TODAS las monedas procesadas)
     function updateComparisonSelector() {
       const compareDiv = document.getElementById('compareDiv');
       const baseSelect = document.getElementById('baseCurrencySelect');
@@ -588,18 +614,15 @@
       renderTable();
     }
     
-    // Evita que la interacción con el selector de comparación borre la selección
     document.getElementById('compareDiv').addEventListener('click', (evt) => {
       evt.stopPropagation();
     });
     
-    // Cambio de moneda base
     document.getElementById('baseCurrencySelect').addEventListener('change', (evt) => {
       baseCurrency = evt.target.value;
       renderTable();
     });
     
-    // Renderiza la gráfica de líneas
     function renderChart() {
       const startIndex = parseInt(document.getElementById('startInterval').value);
       const endIndex = parseInt(document.getElementById('endInterval').value);
@@ -690,7 +713,6 @@
       });
     }
     
-    // Restablece la opacidad de todas las líneas al 100%
     function resetDatasetsOpacity() {
       chart.data.datasets.forEach((ds, i) => {
         ds.borderColor = hexToRgba(originalColors[i], 1);
@@ -699,7 +721,6 @@
       chart.update();
     }
     
-    // Convierte hexadecimal a rgba
     function hexToRgba(hex, alpha) {
       hex = hex.replace('#', '');
       let r = parseInt(hex.substring(0,2), 16);
@@ -708,7 +729,6 @@
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
     
-    // Descarga la tabla actual en CSV
     document.getElementById('downloadBtn').addEventListener('click', () => {
       let csvContent = "";
       let header = ["N°", "Moneda", "Fecha Inicio", "Fecha Fin"];
@@ -751,7 +771,6 @@
       URL.revokeObjectURL(url);
     });
     
-    // Procesa CSVs
     document.getElementById('processBtn').addEventListener('click', async function() {
       if(selectedFiles.length === 0) {
         alert("No hay archivos seleccionados para procesar.");
@@ -765,7 +784,6 @@
       updateComparisonSelector();
     });
     
-    // Reiniciar
     document.getElementById('resetBtn').addEventListener('click', () => {
       selectedFiles = [];
       globalResults = [];
@@ -780,12 +798,10 @@
       updateComparisonSelector();
     });
     
-    // Actualiza gráfico por rango
     document.getElementById('updateChartRange').addEventListener('click', () => {
       if(globalResults.length > 0) { renderChart(); }
     });
     
-    // Toggle modo oscuro
     document.getElementById("darkModeToggle").addEventListener("change", function() {
       if(this.checked) {
         document.documentElement.classList.add("dark");
@@ -794,7 +810,6 @@
       }
     });
     
-    // Evento global para deseleccionar monedas en la tabla al hacer clic fuera
     document.addEventListener('click', (evt) => {
       if(evt.target.tagName !== "BUTTON" && !evt.target.closest("td") && !evt.target.closest("#compareDiv")) {
         updateTableRowOpacity();
@@ -805,7 +820,6 @@
       evt.stopPropagation();
     });
     
-    // Botón pantalla completa del gráfico
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     fullscreenBtn.addEventListener('click', () => {
       const chartContainer = document.getElementById('chartContainer');
@@ -828,24 +842,21 @@
       }
     });
     
-    // Botón para restablecer monedas deseleccionadas en el gráfico
     document.getElementById('resetCoinsBtn').addEventListener('click', () => {
       deselectedCoins.clear();
       document.getElementById('resetCoinsBtn').style.display = "none";
       renderChart();
     });
     
-    // Botón para restablecer opacidad de todas las líneas del gráfico
     document.getElementById('resetOpacityBtn').addEventListener('click', () => {
       resetDatasetsOpacity();
     });
     
-    /********************** Funcionalidad A/B Test (nuevo apartado) **********************/
+    /********************** Funcionalidad A/B Test **********************/
     let abSelectedFiles = [];
     let abResults = [];
     let abGlobalIntervals = [];
     
-    // Actualiza el desplegable de archivos para A/B Test
     function updateABFileList() {
       const abFileList = document.getElementById('abFileList');
       abFileList.innerHTML = "";
@@ -864,7 +875,6 @@
       });
     }
     
-    // Agregar archivos para A/B Test
     document.getElementById('addABFilesBtn').addEventListener('click', () => {
       const input = document.getElementById('csvABInput');
       if(input.files.length === 0) {
@@ -872,7 +882,6 @@
         return;
       }
       for(let i = 0; i < input.files.length; i++) {
-        // Se permite solo hasta 2 archivos
         if(abSelectedFiles.length < 2) {
           abSelectedFiles.push(input.files[i]);
         }
@@ -881,7 +890,6 @@
       updateABFileList();
     });
     
-    // Eliminar archivos seleccionados para A/B Test
     document.getElementById('removeABFileBtn').addEventListener('click', () => {
       const abFileList = document.getElementById('abFileList');
       const selectedOptions = Array.from(abFileList.selectedOptions);
@@ -895,7 +903,6 @@
       updateABFileList();
     });
     
-    // Procesa los archivos de A/B Test
     async function processABFiles() {
       if(abSelectedFiles.length !== 2) {
         alert("Debes seleccionar exactamente 2 archivos para realizar el A/B Test.");
@@ -910,7 +917,6 @@
           console.error("Error en archivo:", abSelectedFiles[i].name, err);
         }
       }
-      // Obtener la unión de campos
       let unionSet = new Set();
       abResults.forEach(result => {
         result.fields.forEach(f => unionSet.add(f));
@@ -922,53 +928,19 @@
           if(!(field in result.averages)) result.averages[field] = null;
         });
       });
-      // Llenar el selector de media para A/B Test
       populateABMediaSelector();
+      populateABMediaSelectorsMin();
       document.getElementById('abMediaSection').style.display = "block";
-      renderABTable();
+      document.getElementById('abMediaSectionMin').style.display = "block";
+      renderABTable(); // Modo mayor diferencia
+      renderABTableMin(); // Modo menor diferencia
     }
     
-    // Renderiza la tabla de resultados para A/B Test con diferencia porcentual (cuando se seleccione la media)
-    function renderABTable(winnerField = null) {
+    // Modo 1: Mayor diferencia (ganador = mayor valor)
+    function renderABTable() {
       const abResultsDiv = document.getElementById('abResults');
       abResultsDiv.innerHTML = "";
-      let table = document.createElement('table');
-      table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
-      let thead = document.createElement('thead');
-      thead.className = "bg-gray-200 dark:bg-gray-700";
-      let headerRow = document.createElement('tr');
-      
-      // Columna de enumeración
-      let thIndex = document.createElement('th');
-      thIndex.className = "py-2 px-4 border select-none text-gray-800 dark:text-gray-100";
-      thIndex.innerText = "N°";
-      headerRow.appendChild(thIndex);
-      
-      // Columnas: Moneda, Fecha Inicio, Fecha Fin
-      let headers = [
-        { text: "Moneda" },
-        { text: "Fecha Inicio" },
-        { text: "Fecha Fin" }
-      ];
-      // Si se ha seleccionado una media para comparar, insertar columna extra para la diferencia porcentual
-      if(winnerField) {
-        headers.push({ text: "Diferencia (%)" });
-      }
-      // Agregar columnas para cada media encontrada
-      abGlobalIntervals.forEach(field => {
-        headers.push({ text: "Media " + field, field: field });
-      });
-      headers.forEach(header => {
-        let th = document.createElement('th');
-        th.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
-        th.innerText = header.text;
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
-      
-      let tbody = document.createElement('tbody');
-      // Si se ha seleccionado una media para comparar, determinar el ganador y calcular la diferencia porcentual
+      let winnerField = document.getElementById('abMediaSelect').value;
       let winnerIndex = null;
       let differencePercentage = null;
       if(winnerField) {
@@ -984,6 +956,45 @@
           }
         }
       }
+      // Anunciar ganador
+      const announcementDiv = document.getElementById('abWinnerAnnouncement');
+      if(winnerIndex !== null && differencePercentage !== null) {
+        announcementDiv.innerText = `Ganador: ${abResults[winnerIndex].currency} con una diferencia de ${differencePercentage.toFixed(2)}%`;
+      } else {
+        announcementDiv.innerText = "";
+      }
+      
+      let table = document.createElement('table');
+      table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
+      let thead = document.createElement('thead');
+      thead.className = "bg-gray-200 dark:bg-gray-700";
+      let headerRow = document.createElement('tr');
+      
+      let headers = [
+        { text: "N°" },
+        { text: "Moneda" },
+        { text: "Fecha Inicio" },
+        { text: "Fecha Fin" }
+      ];
+      // Columna para diferencia porcentual
+      headers.push({ text: "Diferencia (%)" });
+      abGlobalIntervals.forEach(field => {
+        headers.push({ text: "Media " + field, field: field });
+      });
+      headers.forEach(header => {
+        let th = document.createElement('th');
+        th.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        th.innerText = header.text;
+        if(header.field) {
+          // Se aplica opacidad: solo el campo seleccionado (winnerField) queda al 100%
+          th.style.opacity = (header.field === winnerField) ? "1" : "0.15";
+        }
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      let tbody = document.createElement('tbody');
       abResults.forEach((result, index) => {
         let tr = document.createElement('tr');
         if(index === winnerIndex) {
@@ -1009,27 +1020,18 @@
         tdMax.innerText = result.maxDate;
         tr.appendChild(tdMax);
         
-        // Si se ha seleccionado una media, agregar celda con la diferencia porcentual solo en la fila ganadora
-        if(winnerField) {
-          let tdDiff = document.createElement('td');
-          tdDiff.className = "py-2 px-4 border";
-          if(index === winnerIndex && differencePercentage !== null) {
-            tdDiff.innerText = differencePercentage.toFixed(2) + "%";
-          } else {
-            tdDiff.innerText = "";
-          }
-          tr.appendChild(tdDiff);
-        }
+        let tdDiff = document.createElement('td');
+        tdDiff.className = "py-2 px-4 border";
+        tdDiff.innerText = differencePercentage !== null ? differencePercentage.toFixed(2) + "%" : "";
+        tr.appendChild(tdDiff);
         
         abGlobalIntervals.forEach(field => {
           let td = document.createElement('td');
           td.className = "py-2 px-4 border";
           let value = result.averages[field];
-          if(value === null) {
-            td.innerText = "N/A";
-          } else {
-            td.innerText = value.toFixed(2) + "%";
-          }
+          td.innerText = value === null ? "N/A" : value.toFixed(2) + "%";
+          // Ajustar opacidad según la media seleccionada
+          td.style.opacity = (field === winnerField) ? "1" : "0.15";
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -1038,7 +1040,113 @@
       abResultsDiv.appendChild(table);
     }
     
-    // Llena el selector de media para comparar en A/B Test
+    // Modo 2: Menor diferencia al restar dos medias
+    function renderABTableMin() {
+      const abResultsDivMin = document.getElementById('abResultsMin');
+      abResultsDivMin.innerHTML = "";
+      const mediaA = document.getElementById('abMediaSelectMinA').value;
+      const mediaB = document.getElementById('abMediaSelectMinB').value;
+      let winnerIndex = null;
+      let diffValues = [null, null];
+      if(mediaA && mediaB) {
+        // Calcular diferencia absoluta para cada resultado
+        for(let i = 0; i < abResults.length; i++) {
+          let valA = abResults[i].averages[mediaA];
+          let valB = abResults[i].averages[mediaB];
+          if(valA != null && valB != null) {
+            diffValues[i] = Math.abs(valA - valB);
+          } else {
+            diffValues[i] = null;
+          }
+        }
+        if(diffValues[0] != null && diffValues[1] != null) {
+          winnerIndex = diffValues[0] <= diffValues[1] ? 0 : 1;
+        }
+      }
+      // Anunciar ganador
+      const announcementDivMin = document.getElementById('abWinnerAnnouncementMin');
+      if(winnerIndex !== null && diffValues[winnerIndex] != null) {
+        announcementDivMin.innerText = `Ganador: ${abResults[winnerIndex].currency} con una diferencia absoluta de ${diffValues[winnerIndex].toFixed(2)}% entre ${mediaA} y ${mediaB}`;
+      } else {
+        announcementDivMin.innerText = "";
+      }
+      
+      let table = document.createElement('table');
+      table.className = "min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700";
+      let thead = document.createElement('thead');
+      thead.className = "bg-gray-200 dark:bg-gray-700";
+      let headerRow = document.createElement('tr');
+      
+      let headers = [
+        { text: "N°" },
+        { text: "Moneda" },
+        { text: "Fecha Inicio" },
+        { text: "Fecha Fin" }
+      ];
+      // Columna para diferencia absoluta
+      headers.push({ text: "Diferencia Absoluta" });
+      abGlobalIntervals.forEach(field => {
+        headers.push({ text: "Media " + field, field: field });
+      });
+      headers.forEach(header => {
+        let th = document.createElement('th');
+        th.className = "py-2 px-4 border text-gray-800 dark:text-gray-100";
+        th.innerText = header.text;
+        if(header.field) {
+          // En este modo, se muestran con opacidad completa solo los campos seleccionados (mediaA o mediaB)
+          th.style.opacity = (header.field === mediaA || header.field === mediaB) ? "1" : "0.15";
+        }
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      let tbody = document.createElement('tbody');
+      abResults.forEach((result, index) => {
+        let tr = document.createElement('tr');
+        if(index === winnerIndex) {
+          tr.classList.add("bg-green-200");
+        }
+        let tdIndex = document.createElement('td');
+        tdIndex.className = "py-2 px-4 border";
+        tdIndex.innerText = index + 1;
+        tr.appendChild(tdIndex);
+        
+        let tdCurrency = document.createElement('td');
+        tdCurrency.className = "py-2 px-4 border";
+        tdCurrency.innerText = result.currency;
+        tr.appendChild(tdCurrency);
+        
+        let tdMin = document.createElement('td');
+        tdMin.className = "py-2 px-4 border";
+        tdMin.innerText = result.minDate;
+        tr.appendChild(tdMin);
+        
+        let tdMax = document.createElement('td');
+        tdMax.className = "py-2 px-4 border";
+        tdMax.innerText = result.maxDate;
+        tr.appendChild(tdMax);
+        
+        let tdDiff = document.createElement('td');
+        tdDiff.className = "py-2 px-4 border";
+        tdDiff.innerText = diffValues[index] != null ? diffValues[index].toFixed(2) + "%" : "";
+        tr.appendChild(tdDiff);
+        
+        abGlobalIntervals.forEach(field => {
+          let td = document.createElement('td');
+          td.className = "py-2 px-4 border";
+          let value = result.averages[field];
+          td.innerText = value === null ? "N/A" : value.toFixed(2) + "%";
+          // Solo se muestran al 100% de opacidad las medias seleccionadas
+          td.style.opacity = (field === mediaA || field === mediaB) ? "1" : "0.15";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      abResultsDivMin.appendChild(table);
+    }
+    
     function populateABMediaSelector() {
       const abMediaSelect = document.getElementById('abMediaSelect');
       abMediaSelect.innerHTML = "";
@@ -1050,27 +1158,77 @@
       });
     }
     
-    // Botón para procesar A/B Test
+    function populateABMediaSelectorsMin() {
+      const abMediaSelectMinA = document.getElementById('abMediaSelectMinA');
+      const abMediaSelectMinB = document.getElementById('abMediaSelectMinB');
+      abMediaSelectMinA.innerHTML = "";
+      abMediaSelectMinB.innerHTML = "";
+      abGlobalIntervals.forEach(field => {
+        let optionA = document.createElement('option');
+        optionA.value = field;
+        optionA.text = "Media " + field;
+        abMediaSelectMinA.add(optionA);
+        
+        let optionB = document.createElement('option');
+        optionB.value = field;
+        optionB.text = "Media " + field;
+        abMediaSelectMinB.add(optionB);
+      });
+    }
+    
     document.getElementById('processABBtn').addEventListener('click', async () => {
       await processABFiles();
     });
     
-    // Botón para comparar A/B Test (determinar ganador según media seleccionada)
     document.getElementById('compareABBtn').addEventListener('click', () => {
-      const abMediaSelect = document.getElementById('abMediaSelect');
-      const selectedField = abMediaSelect.value;
-      renderABTable(selectedField);
+      renderABTable();
     });
     
-    // Botón para reiniciar A/B Test
+    document.getElementById('compareABMinBtn').addEventListener('click', () => {
+      renderABTableMin();
+    });
+    
+    // Botón para resetear la opacidad en el apartado A/B Test
+    document.getElementById('resetABOpacityBtn').addEventListener('click', () => {
+      resetABOpacity();
+    });
+    
     document.getElementById('resetABBtn').addEventListener('click', () => {
       abSelectedFiles = [];
       abResults = [];
       abGlobalIntervals = [];
       updateABFileList();
       document.getElementById('abResults').innerHTML = "";
+      document.getElementById('abWinnerAnnouncement').innerText = "";
+      document.getElementById('abResultsMin').innerHTML = "";
+      document.getElementById('abWinnerAnnouncementMin').innerText = "";
       document.getElementById('abMediaSection').style.display = "none";
+      document.getElementById('abMediaSectionMin').style.display = "none";
     });
+    
+    // Función para restablecer la opacidad en los apartados de A/B Test
+    function resetABOpacity() {
+      // Restablecer opacidad en el modo 1 (tabla de diferencia %)
+      const abResultsDiv = document.getElementById('abResults');
+      const table1 = abResultsDiv.querySelector('table');
+      if(table1) {
+        for (let row of table1.rows) {
+          for(let i = 5; i < row.cells.length; i++){
+            row.cells[i].style.opacity = "1";
+          }
+        }
+      }
+      // Restablecer opacidad en el modo 2 (tabla de diferencia absoluta)
+      const abResultsDivMin = document.getElementById('abResultsMin');
+      const table2 = abResultsDivMin.querySelector('table');
+      if(table2) {
+        for (let row of table2.rows) {
+          for(let i = 5; i < row.cells.length; i++){
+            row.cells[i].style.opacity = "1";
+          }
+        }
+      }
+    }
     
   </script>
 </body>
